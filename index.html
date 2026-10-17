@@ -9,18 +9,60 @@
 <meta name="apple-mobile-web-app-title" content="융림이네 가계부">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#EDF0F5">
+<link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="apple-touch-icon.png">
 <style>
-html,body{margin:0;height:100%;background:#EDF0F5;overflow:hidden;overscroll-behavior:none}
+html,body{margin:0;height:100%;background:#EDF0F5;overflow:hidden;overscroll-behavior:none;font-family:-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif}
 body{position:fixed;inset:0}
-iframe{position:absolute;top:0;left:0;right:0;bottom:env(safe-area-inset-bottom,0px);width:100%;height:calc(100% - env(safe-area-inset-bottom,0px));border:0;display:block}
+iframe{position:absolute;top:0;left:0;width:100%;height:calc(100% - env(safe-area-inset-bottom,0px));border:0;display:block}
 .bottom{position:absolute;left:0;right:0;bottom:0;height:env(safe-area-inset-bottom,0px);background:#FFFFFF}
+#bell{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 150px);z-index:5;display:flex;align-items:center;gap:10px;background:#1D2A47;color:#fff;border-radius:16px;padding:12px 12px 12px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);width:max-content;max-width:calc(100% - 32px);cursor:pointer}
+#bell[hidden]{display:none}
+#bell b{display:block;font-size:15px}
+#bell small{display:block;font-size:12px;color:#B4BED3}
+#bellX{border:0;background:transparent;color:#B4BED3;font-size:18px;padding:4px 6px;cursor:pointer}
+#tst{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 14px);transform:translate(-50%,-200%);z-index:6;background:#131A27;color:#fff;padding:12px 16px;border-radius:14px;font-size:14px;max-width:calc(100% - 32px);width:max-content;transition:transform .25s}
+#tst.on{transform:translate(-50%,0)}
 @media (prefers-color-scheme: dark){html,body{background:#0C0F16}.bottom{background:#161B26}}
 </style>
 </head>
 <body>
 <iframe src="https://script.google.com/macros/s/AKfycbyPhpnWs8d-LNE9jnz0Blt4ix669Mw1oi7TL08KraFUqw7z5HZqeca5eeXL_Q8ngiU2lA/exec" title="융림이네 가계부" allow="clipboard-write"></iframe>
 <div class="bottom"></div>
+<div id="bell" hidden><span style="font-size:22px">🔔</span><span><b>폰 알림 켜기</b><small>예산 경고를 배너·진동으로 받아요</small></span><button id="bellX" aria-label="닫기">✕</button></div>
+<div id="tst"></div>
+<script>
+var EXEC = 'https://script.google.com/macros/s/AKfycbyPhpnWs8d-LNE9jnz0Blt4ix669Mw1oi7TL08KraFUqw7z5HZqeca5eeXL_Q8ngiU2lA/exec', VAPID = 'BDUJRHTrPyOLHdbkqETPprbVX6_uq6iYmNl4DSu_NCeY8b-SWgibCTuSp2M4G4iAfki4H3jRMj73ov9bherxujI', auth = null;
+function toast(m) { var t = document.getElementById('tst'); t.textContent = m; t.className = 'on'; clearTimeout(t._h); t._h = setTimeout(function () { t.className = ''; }, 3500); }
+function standalone() { return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; }
+function canPush() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+function u8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); var r = atob(s + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(r, function (c) { return c.charCodeAt(0); }); }
+function update() {
+var b = document.getElementById('bell'), off = false;
+try { off = localStorage.getItem('bellX') === '1'; } catch (e) {}
+b.hidden = !(auth && standalone() && canPush() && Notification.permission === 'default' && !off);
+if (auth && canPush() && Notification.permission === 'granted') subscribe(true);
+}
+function subscribe(quiet) {
+return navigator.serviceWorker.ready.then(function (reg) {
+return reg.pushManager.getSubscription().then(function (s) { return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(VAPID) }); });
+}).then(function (sub) {
+return fetch(EXEC, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'subscribe', key: auth.key, person: auth.person, sub: sub.toJSON() }) });
+}).then(function () { document.getElementById('bell').hidden = true; if (!quiet) toast('알림이 켜졌어요. 설정 › 테스트 알림으로 확인해 보세요.'); })
+.catch(function (e) { if (!quiet) toast('알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.'); });
+}
+window.addEventListener('message', function (e) {
+if (!e.data || e.data.type !== 'hb-auth') return;
+auth = { key: e.data.key, person: e.data.person };
+if (window.caches) caches.open('hb').then(function (c) { return c.put('hb-auth', new Response(JSON.stringify(auth), { headers: { 'Content-Type': 'application/json' } })); }).catch(function () {});
+update();
+});
+document.getElementById('bell').addEventListener('click', function (e) {
+if (e.target.id === 'bellX') { try { localStorage.setItem('bellX', '1'); } catch (er) {} document.getElementById('bell').hidden = true; return; }
+Notification.requestPermission().then(function (p) { if (p === 'granted') subscribe(false); else { document.getElementById('bell').hidden = true; toast('알림이 꺼져 있어요. 아이폰 설정 › 알림에서 켤 수 있어요.'); } });
+});
+</script>
 </body>
 </html>
