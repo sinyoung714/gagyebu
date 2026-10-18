@@ -140,6 +140,9 @@ body.sheet-open{position:fixed;left:0;right:0;overflow:hidden}
 .item .t{font-weight:600} .item .s{font-size:12.5px;color:var(--sub)}
 .item.off{opacity:.45}
 .add-link{border:0;background:transparent;color:var(--accent);font-weight:700;font-size:14px;cursor:pointer;padding:4px}
+.grp-h{display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:var(--sub);padding:12px 0 4px;border-bottom:1px solid var(--line)}
+.fx{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14.5px;cursor:pointer;border-bottom:1px solid var(--line)}
+.fx:last-child{border-bottom:0}.fx .d{width:30px;color:var(--sub);font-size:13px;flex:none}.fx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fx.off{opacity:.45}
 .loan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .loan-grid div{background:var(--soft);border-radius:12px;padding:10px 12px}
 .loan-grid .k{font-size:12px;color:var(--sub)} .loan-grid .v{font-weight:700;font-size:16px}
@@ -436,10 +439,14 @@ h += parts.map(function (x) { return '<div class="row"><span class="k"><span cla
 '<div class="note">생활비 = 월급 − 고정지출 − 대출 − 저축이에요. 저축은 설정에서 바꿀 수 있고, 생활비의 80%·100%를 쓰면 알림이 와요.</div>' +
 (m.income ? '' : '<div class="note">설정에 각자 월급을 넣거나 추가 › 수입으로 월급을 기록해 주세요.</div>') + '</div>';
 if (F && F.items.length) {
-h += '<div class="card"><h3>통장에서 나가는 순서<span style="font-weight:500">' + md(F.start) + ' 월급 → ' + md(F.end) + ' 다음 월급</span></h3>' +
-'<div class="row"><span class="k">' + md(F.start) + ' 월급 들어옴</span><span class="v num" style="color:var(--good)">+' + won(F.income) + '</span></div>' +
-F.items.map(function (it) { return '<div class="row" style="' + (it.done ? 'opacity:.55' : '') + '"><span class="k" style="min-width:0"><b style="color:var(--ink);font-weight:600">' + (it.date ? md(it.date) + ' ' : '') + esc(it.label) + '</b>' + (it.done ? ' <small>· 나감</small>' : '') + '<br><small>' + esc(it.sub) + '</small></span><span class="v num">−' + won(it.amount) + '</span></div>'; }).join('') +
-'<div class="row total"><span class="k">다음 월급(' + md(F.end) + ') 전에 통장에 남는 돈</span><span class="v num" style="color:' + (F.left < 0 ? 'var(--bad)' : 'var(--good)') + '">' + won(F.left) + '</span></div>' +
+var fg = {}, fo = [];
+F.items.forEach(function (it) { var k = it.date || '~'; if (!fg[k]) { fg[k] = []; fo.push(k); } fg[k].push(it); });
+var fname = function (x) { return x.kind === 'card' ? '카드값' : x.kind === 'fixed' ? '고정지출' : x.kind === 'loan' ? '대출' : x.label; };
+h += '<div class="card" id="flowCard"><h3>다음 월급(' + md(F.end) + ')까지 통장<span class="num" style="font-weight:700;color:' + (F.left < 0 ? 'var(--bad)' : 'var(--good)') + '">' + won(F.left) + ' 남음</span></h3>' +
+fo.map(function (k) { var its = fg[k], sum = its.reduce(function (a, x) { return a + x.amount; }, 0), done = its.every(function (x) { return x.done; });
+return '<div class="row" style="padding:5px 0' + (done ? ';opacity:.5' : '') + '"><span class="k">' + (k === '~' ? '계좌로 쓴 돈' : '<b class="num" style="color:var(--ink)">' + md(k) + '</b> ' + its.map(fname).filter(function (v, i, A) { return A.indexOf(v) === i; }).join('·')) + (done ? ' <small>· 나감</small>' : '') + '</span><span class="v num">−' + won(sum) + '</span></div>' +
+(S.flowOpen ? its.filter(function (x) { return x.amount; }).map(function (x) { return '<div style="font-size:12.5px;color:var(--sub);margin:-2px 0 4px 14px">' + esc(x.label) + ' ' + won(x.amount) + (x.sub ? ' · ' + esc(x.sub) : '') + '</div>'; }).join('') : ''); }).join('') +
+'<button class="add-link" id="flowMore" style="padding:6px 0 0;font-size:13px">' + (S.flowOpen ? '접기' : '자세히 보기') + '</button>' +
 (F.left < 0 ? '<div class="note"><b>통장 잔액이 모자랄 수 있어요.</b> 출금일 전에 채워 두세요.</div>' : '') + '</div>';
 }
 var ppl = d.people, a1 = Math.max(0, m.byPerson[ppl[0]] || 0), a2 = Math.max(0, m.byPerson[ppl[1]] || 0), a3 = Math.max(0, m.byPerson['공동'] || 0), tw = a1 + a2 + a3;
@@ -454,6 +461,7 @@ if (m.upcoming.length) h += '<div class="card"><h3>이번 달 나갈 고정 지�
 $('v-home').innerHTML = h;
 Array.prototype.forEach.call($('v-home').querySelectorAll('[data-tid]'), function (el) { el.onclick = function () { var id = el.getAttribute('data-tid'); if (S.d.txs.some(function (x) { return x.id === id; })) openDetail(id); else toast('처음 산 달의 내역에서 고칠 수 있어요'); }; });
 Array.prototype.forEach.call($('v-home').querySelectorAll('[data-cn]'), function (el) { el.onclick = function () { openCardTx(el.getAttribute('data-cn')); }; });
+if ($('flowMore')) $('flowMore').onclick = function () { S.flowOpen = !S.flowOpen; renderHome(); };
 }
 function renderList() {
 var d = S.d, h = '';
@@ -507,43 +515,53 @@ var max = vals[0] || 1, w = 300, hgt = 50, pts = vals.map(function (v, i) { retu
 return '<svg class="spark" viewBox="0 0 300 54" preserveAspectRatio="none"><polygon points="0,54 ' + pts.join(' ') + ' 300,54" fill="var(--accent-soft)"/><polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
 }
 function payoffLabel(months) { var dt = new Date(); dt.setMonth(dt.getMonth() + Number(months || 0)); return dt.getFullYear() + '년 ' + (dt.getMonth() + 1) + '월'; }
+function loanInfo(l) {
+var gEnd = /^\d{4}-\d{2}$/.test(String(l['거치끝'] || '')) ? String(l['거치끝']) : '', gr = !!gEnd && S.ym <= gEnd, gm = gr ? ((+gEnd.slice(0, 4) - +S.ym.slice(0, 4)) * 12 + (+gEnd.slice(5, 7) - +S.ym.slice(5, 7)) + 1) : 0;
+var after = loanCalc(l['남은원금'], l['연이율'], l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']), gi = Math.round((Number(l['남은원금']) || 0) * (Number(l['연이율']) || 0) / 1200);
+return { gEnd: gEnd, gr: gr, gm: gm, gi: gi, after: after, c: gr ? { payment: gi, interest: gi, principal: 0 } : after, months: Number(l['남은개월']) + gm };
+}
 function renderPlan() {
 var d = S.d, h = '';
 var fixed = d.fixed, tot = fixed.filter(function (f) { return f['사용'] !== 'N'; }).reduce(function (a, f) { return a + Number(f['금액']); }, 0);
-h += '<div class="card"><h3>고정지출 · 매달 ' + won(tot) + '<button class="add-link" id="addFixed">+ 고정지출 등록</button></h3>';
-if (!fixed.length) h += '<div class="k" style="color:var(--sub);font-size:14px;padding:6px 0">관리비, 통신비, 보험료, 구독료 등을 등록하세요.</div>';
-fixed.slice().sort(function (a, b) { return a['매달'] - b['매달']; }).forEach(function (f) {
-h += '<div class="item ' + (f['사용'] === 'N' ? 'off' : '') + '" data-fixed="' + esc(f.id) + '"><div><div class="t">' + esc(f['이름']) + '</div><div class="s">매달 ' + f['매달'] + '일 · ' + esc(f['사람'] || '공동') + ' · ' + (f['출금'] ? esc(srcLabel(f['출금'], f['사람'])) + '에서 ' : '') + (f['문자로기록됨'] === 'Y' ? '카드결제' : '자동이체') + '</div></div><div class="v num"><b>' + won(f['금액']) + '</b></div></div>';
+h += '<div class="card"><h3>고정지출 · 매달 ' + won(tot) + '<button class="add-link" id="addFixed">+ 추가</button></h3>';
+if (!fixed.length) h += '<div style="color:var(--sub);font-size:14px;padding:6px 0">관리비, 통신비, 보험료, 구독료 등을 등록하세요.</div>';
+var groups = {}, gsum = {};
+fixed.forEach(function (f) { var k = f['출금'] ? srcLabel(f['출금'], f['사람']) : '출금 통장 미지정'; (groups[k] = groups[k] || []).push(f); if (f['사용'] !== 'N') gsum[k] = (gsum[k] || 0) + Number(f['금액']); });
+Object.keys(groups).sort(function (a, b) { return (gsum[b] || 0) - (gsum[a] || 0); }).forEach(function (k) {
+h += '<div class="grp-h"><span>' + esc(k) + '</span><span class="num">' + won(gsum[k] || 0) + '</span></div>';
+groups[k].sort(function (a, b) { return a['매달'] - b['매달']; }).forEach(function (f) {
+h += '<div class="fx' + (f['사용'] === 'N' ? ' off' : '') + '" data-fixed="' + esc(f.id) + '"><span class="d num">' + f['매달'] + '일</span><span class="t">' + esc(f['이름']) + (f['문자로기록됨'] === 'Y' ? ' <small style="color:var(--sub)">카드</small>' : '') + '</span><span class="num">' + won(f['금액']) + '</span></div>';
+});
 });
 h += '</div>';
-var bySrc = {}; fixed.forEach(function (f) { if (f['사용'] === 'N') return; var k = f['출금'] ? srcLabel(f['출금'], f['사람']) : '미지정'; bySrc[k] = (bySrc[k] || 0) + Number(f['금액']); });
-var srcKeys = Object.keys(bySrc);
-if (srcKeys.length > 1 || (srcKeys.length === 1 && srcKeys[0] !== '미지정')) h += '<div class="card"><h3>통장·카드별 매달 나가는 돈</h3>' + srcKeys.sort(function (a, b) { return bySrc[b] - bySrc[a]; }).map(function (k) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v num">' + won(bySrc[k]) + '</span></div>'; }).join('') + '<div class="hint" style="font-size:12.5px;color:var(--sub);margin-top:6px">이 금액만큼은 각 통장에 남겨 두세요. 대출 상환액은 빠져 있어요.</div></div>';
-h += '<div class="card"><h3>대출<button class="add-link" id="addLoan">+ 대출 등록</button></h3>';
+h += '<div class="card"><h3>대출<button class="add-link" id="addLoan">+ 추가</button></h3>';
 if (!d.loans.length) h += '<div style="color:var(--sub);font-size:14px;padding:6px 0">주택담보대출 등을 등록하면 매달 상환액과 이자가 자동 계산돼요.</div>';
 d.loans.forEach(function (l) {
-var gEnd = /^\d{4}-\d{2}$/.test(String(l['거치끝'] || '')) ? String(l['거치끝']) : '', gr = !!gEnd && S.ym <= gEnd, gm = gr ? ((+gEnd.slice(0, 4) - +S.ym.slice(0, 4)) * 12 + (+gEnd.slice(5, 7) - +S.ym.slice(5, 7)) + 1) : 0;
-var after = loanCalc(l['남은원금'], l['연이율'], l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']), gi = Math.round((Number(l['남은원금']) || 0) * (Number(l['연이율']) || 0) / 1200);
-var c = gr ? { payment: gi, interest: gi, principal: 0 } : after;
-var up = loanCalc(l['남은원금'], Number(l['연이율']) + 0.5, l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']);
-var sc = loanSchedule(l);
-h += '<div class="item ' + (l['사용'] === 'N' ? 'off' : '') + '" data-loan="' + esc(l.id) + '" style="display:block">';
-h += '<div style="display:flex;justify-content:space-between"><div><div class="t">' + esc(l['이름']) + '</div><div class="s">' + esc(l['상환방식']) + (l['상환방식'] === '체증식' ? '(매달 +' + won(l['증가율']) + ')' : '') + (gEnd ? ' · 거치 ~' + gEnd.replace('-', '.') : '') + ' · 연 ' + l['연이율'] + '% · 매달 ' + l['납부일'] + '일</div></div><span class="add-link">수정</span></div>';
-h += '<div class="loan-grid">' +
-'<div><div class="k">이번 달 상환액</div><div class="v num">' + won(c.payment) + '</div></div>' +
-'<div><div class="k">그중 이자</div><div class="v num" style="color:var(--warn)">' + won(c.interest) + '</div></div>' +
-'<div><div class="k">남은 원금</div><div class="v num">' + man(l['남은원금']) + '</div></div>' +
-'<div><div class="k">앞으로 낼 이자 합계</div><div class="v num">' + man(sc.totalInterest + gm * gi) + '</div></div></div>';
-h += spark(sc.balances);
-h += '<div class="note">완납 예정 <b style="color:var(--ink)">' + payoffLabel(Number(l['남은개월']) + gm) + '</b> (' + (Number(l['남은개월']) + gm) + '개월 남음)<br>' + (gr ? '<b>거치기간</b>이라 ' + gEnd.slice(0, 4) + '년 ' + (+gEnd.slice(5, 7)) + '월까지는 이자만 내요. 그 뒤부터 매달 <b>' + won(after.payment) + '</b>씩 원금과 같이 갚아요.<br>' : '') + (l['상환방식'] === '체증식' ? '체증식이라 상환액이 매달 <b>' + won(l['증가율']) + '</b>씩 늘어나요. 금리가 바뀌면 연이율만 고치면 돼요.' : '금리가 0.5%p 오르면 월 <b>+' + won(up.payment - after.payment) + '</b>. 금리가 바뀌면 연이율만 고치면 돼요.') + '</div>';
-h += '</div>';
+var L = loanInfo(l);
+h += '<div class="fx' + (l['사용'] === 'N' ? ' off' : '') + '" data-loan="' + esc(l.id) + '" style="align-items:flex-start"><span class="d num">' + l['납부일'] + '일</span><span class="t" style="white-space:normal">' + esc(l['이름']) + '<br><small style="color:var(--sub)">남은 ' + man(l['남은원금']) + ' · ' + payoffLabel(L.months) + ' 완납' + (L.gr ? ' · ' + L.gEnd.slice(2, 4) + '년 ' + (+L.gEnd.slice(5, 7)) + '월까지 이자만' : '') + '</small></span><span class="num">' + won(L.c.payment) + '</span></div>';
 });
 h += '</div>';
 $('v-plan').innerHTML = h;
 $('addFixed').onclick = function () { openFixed(); };
 $('addLoan').onclick = function () { openLoan(); };
 Array.prototype.forEach.call($('v-plan').querySelectorAll('[data-fixed]'), function (el) { el.onclick = function () { openFixed(el.getAttribute('data-fixed')); }; });
-Array.prototype.forEach.call($('v-plan').querySelectorAll('[data-loan]'), function (el) { el.onclick = function () { openLoan(el.getAttribute('data-loan')); }; });
+Array.prototype.forEach.call($('v-plan').querySelectorAll('[data-loan]'), function (el) { el.onclick = function () { openLoanDetail(el.getAttribute('data-loan')); }; });
+}
+function openLoanDetail(id) {
+var l = S.d.loans.find(function (x) { return x.id === id; }); if (!l) return;
+var L = loanInfo(l), c = L.c, sc = loanSchedule(l);
+var up = loanCalc(l['남은원금'], Number(l['연이율']) + 0.5, l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']);
+var h = '<h2>' + esc(l['이름']) + '</h2><div style="font-size:13px;color:var(--sub);margin:-10px 0 12px">' + esc(l['상환방식']) + (l['상환방식'] === '체증식' ? '(매달 +' + won(l['증가율']) + ')' : '') + ' · 연 ' + l['연이율'] + '% · 매달 ' + l['납부일'] + '일</div>' +
+'<div class="loan-grid">' +
+'<div><div class="k">이번 달 상환액</div><div class="v num">' + won(c.payment) + '</div></div>' +
+'<div><div class="k">그중 이자</div><div class="v num" style="color:var(--warn)">' + won(c.interest) + '</div></div>' +
+'<div><div class="k">남은 원금</div><div class="v num">' + man(l['남은원금']) + '</div></div>' +
+'<div><div class="k">앞으로 낼 이자</div><div class="v num">' + man(sc.totalInterest + L.gm * L.gi) + '</div></div></div>' +
+spark(sc.balances) +
+'<div class="note">완납 예정 <b style="color:var(--ink)">' + payoffLabel(L.months) + '</b> (' + L.months + '개월 남음)<br>' + (L.gr ? '<b>거치기간</b>이라 ' + L.gEnd.slice(0, 4) + '년 ' + (+L.gEnd.slice(5, 7)) + '월까지는 이자만 내요. 그 뒤부터 매달 <b>' + won(L.after.payment) + '</b>씩 갚아요.<br>' : '') + (l['상환방식'] === '체증식' ? '상환액이 매달 <b>' + won(l['증가율']) + '</b>씩 늘어나요.' : '금리가 0.5%p 오르면 월 <b>+' + won(up.payment - L.after.payment) + '</b>.') + '</div>' +
+'<div class="btns" style="margin-top:12px"><button class="btn ghost" id="ld_edit">수정</button></div>';
+openSheet(h);
+$('ld_edit').onclick = function () { openLoan(id); };
 }
 function renderSettings() {
 var d = S.d, s = d.settings, h = '';
