@@ -430,11 +430,11 @@ return '<div class="mcard" data-cn="' + esc(c.name) + '" style="background:' + C
 if (m.installments && m.installments.length) h += '<div class="card"><h3>진행 중인 할부<span class="num" style="font-weight:600">이번 달 ' + won(m.installments.reduce(function (a, x) { return a + x.monthly; }, 0)) + '</span></h3>' + m.installments.map(function (x) { return '<div class="row" data-tid="' + esc(x.id) + '" style="cursor:pointer"><span class="k" style="min-width:0"><b style="color:var(--ink);font-weight:600">' + esc(x.name) + '</b> <small>' + x.k + '/' + x.n + '회차</small><br><small>' + esc([x.card, x.who].filter(Boolean).join(' · ')) + ' · 총 ' + won(x.total) + (x.left ? ' · ' + x.left + '달 남음' : ' · 마지막 달') + '</small></span><span class="v num">' + won(x.monthly) + '</span></div>'; }).join('') + '<div class="note">할부는 총 금액이 아니라 매달 내는 금액만 생활비·카드값에 들어가요.</div></div>';
 var F = m.flow, base = m.income || 1;
 var parts = [['고정지출', m.fixedPlanned, 'var(--c8)'], ['대출 상환', m.loanPlanned, 'var(--c2)'], ['저축', m.savings || 0, 'var(--c5)'], ['생활비', m.budget, 'var(--c1)']];
-h += '<div class="card"><h3>월급 나눠 쓰기<span class="num" style="font-weight:600">월급 ' + won(m.income) + (m.income && !m.incomeFromRecords ? ' (기본값)' : '') + '</span></h3>';
+h += '<div class="card"><h3>월급 나눠 쓰기<span class="num" style="font-weight:600">수입 ' + won(m.income) + '</span></h3>' + (m.incomeExtra ? '<div class="row" style="padding-top:0"><span class="k">월급 ' + won(m.incomeSalary || 0) + ' + 용돈·부수입 ' + won(m.incomeExtra) + '</span></div>' : '');
 if (m.income) h += '<div class="stack">' + parts.map(function (x) { return x[1] > 0 ? '<i style="width:' + (x[1] / base * 100).toFixed(2) + '%;background:' + x[2] + '"></i>' : ''; }).join('') + '</div>';
 h += parts.map(function (x) { return '<div class="row"><span class="k"><span class="dot" style="background:' + x[2] + '"></span>' + x[0] + '</span><span class="v num">' + won(x[1]) + '</span></div>'; }).join('') +
 '<div class="note">생활비 = 월급 − 고정지출 − 대출 − 저축이에요. 저축은 설정에서 바꿀 수 있고, 생활비의 80%·100%를 쓰면 알림이 와요.</div>' +
-(m.income ? '' : '<div class="note">설정에 기본 월수입을 넣거나 추가 › 수입으로 월급을 기록해 주세요.</div>') + '</div>';
+(m.income ? '' : '<div class="note">설정에 각자 월급을 넣거나 추가 › 수입으로 월급을 기록해 주세요.</div>') + '</div>';
 if (F && F.items.length) {
 h += '<div class="card"><h3>통장에서 나가는 순서<span style="font-weight:500">' + md(F.start) + ' 월급 → ' + md(F.end) + ' 다음 월급</span></h3>' +
 '<div class="row"><span class="k">' + md(F.start) + ' 월급 들어옴</span><span class="v num" style="color:var(--good)">+' + won(F.income) + '</span></div>' +
@@ -549,7 +549,7 @@ function renderSettings() {
 var d = S.d, s = d.settings, h = '';
 h += '<div class="card"><h3>우리 집</h3><div class="two">' +
 fld('사람1', '내 이름', s['사람1']) + fld('사람2', '배우자 이름', s['사람2']) + '</div>' +
-fld('월수입', '기본 월수입 (둘 합산)', s['월수입'], 'numeric', '추가 › 수입으로 그달 수입을 기록하면 그 금액이 먼저 쓰여요.') +
+'<div class="two">' + fld('월급1', esc(s['사람1'] || '나') + ' 월급', s['월급1'] || '', 'numeric') + fld('월급2', esc(s['사람2'] || '배우자') + ' 월급', s['월급2'] || '', 'numeric') + '</div><div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">매달 고정으로 들어오는 월급이에요. 추가 › 수입으로 넣는 용돈·부수입은 여기에 더해져요. (수입을 \'월급\'으로 기록한 달은 그 금액으로 바뀌어요)</div>' +
 fld('월급날', '월급날 (매달 며칠)', s['월급날'], 'numeric', '이날부터 다음 월급 전날까지를 한 달로 계산해요.') + fld('저축', '매달 저축할 돈', s['저축'], 'numeric', '월급 − 고정지출 − 대출 − 저축 = 생활비로 자동 계산돼요.') + '</div>';
 h += '<div class="card"><h3>지출 경고 알림</h3>' +
 fld('알림단계', '알림 받을 사용률 (%)', s['알림단계'], '', '쉼표로 여러 개. 예: 70,90,100 → 단계마다 한 번씩 알려요.') +
@@ -573,8 +573,8 @@ h += '<button class="btn ghost" id="logout">이 폰에서 로그아웃</button><
 $('v-settings').innerHTML = h;
 $('saveSet').onclick = function () {
 var o = {};
-['사람1', '사람2', '월수입', '월급날', '저축', '알림단계', 'ntfy토픽', '분류목록'].forEach(function (k) { o[k] = $('f_' + k).value.trim(); });
-o['월수입'] = o['월수입'].replace(/[^\d]/g, '') || '0';
+['사람1', '사람2', '월급1', '월급2', '월급날', '저축', '알림단계', 'ntfy토픽', '분류목록'].forEach(function (k) { o[k] = $('f_' + k).value.trim(); });
+o['월급1'] = o['월급1'].replace(/[^\d]/g, ''); o['월급2'] = o['월급2'].replace(/[^\d]/g, '');
 o['저축'] = o['저축'].replace(/[^\d]/g, '') || '0';
 o['월급날'] = String(Math.max(1, Math.min(28, Number(o['월급날'].replace(/[^\d]/g, '')) || 10)));
 ['초과후매결제알림', '결제공유'].forEach(function (k) { o[k] = $('f_' + k).checked ? 'Y' : 'N'; });
