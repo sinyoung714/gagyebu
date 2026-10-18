@@ -1,4 +1,4 @@
-var EXEC = 'https://script.google.com/macros/s/AKfycbyPhpnWs8d-LNE9jnz0Blt4ix669Mw1oi7TL08KraFUqw7z5HZqeca5eeXL_Q8ngiU2lA/exec';
+var EXEC = 'https://daysucvaoormvckvqgsn.supabase.co/functions/v1/api';
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener('push', function (e) {
