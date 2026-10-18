@@ -569,7 +569,7 @@ var d = S.d, s = d.settings, h = '';
 h += '<div class="card"><h3>우리 집</h3><div class="two">' +
 fld('사람1', '내 이름', s['사람1']) + fld('사람2', '배우자 이름', s['사람2']) + '</div>' +
 '<div class="two">' + fld('월급1', esc(s['사람1'] || '나') + ' 월급', s['월급1'] || '', 'numeric') + fld('월급2', esc(s['사람2'] || '배우자') + ' 월급', s['월급2'] || '', 'numeric') + '</div><div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">매달 고정으로 들어오는 월급이에요. 추가 › 수입으로 넣는 용돈·부수입은 여기에 더해져요. (수입을 \'월급\'으로 기록한 달은 그 금액으로 바뀌어요)</div>' +
-fld('월급날', '월급날 (매달 며칠)', s['월급날'], 'numeric', '이날부터 다음 월급 전날까지를 한 달로 계산해요.') + fld('저축', '매달 저축할 돈', s['저축'], 'numeric', '월급 − 고정지출 − 대출 − 저축 = 생활비로 자동 계산돼요.') + '</div>';
+fld('월급날', '월급날 (매달 며칠)', s['월급날'], 'numeric', '월급 → 카드값·고정지출이 나가는 통장 흐름에 써요.') + fld('시작일', '한 달 시작일 (카드 리셋일)', s['시작일'] || s['월급날'], 'numeric', '이날부터 다음 달 전날까지를 생활비 한 달로 계산해요. 생활비를 주로 쓰는 카드의 이용 시작일로 맞추면 카드값과 딱 맞아요.') + fld('저축', '매달 저축할 돈', s['저축'], 'numeric', '월급 − 고정지출 − 대출 − 저축 = 생활비로 자동 계산돼요.') + '</div>';
 h += '<div class="card"><h3>지출 경고 알림</h3>' +
 fld('알림단계', '알림 받을 사용률 (%)', s['알림단계'], '', '쉼표로 여러 개. 예: 70,90,100 → 단계마다 한 번씩 알려요.') +
 tog('초과후매결제알림', '예산 넘은 뒤엔 결제마다 알림', '100%를 넘으면 카드를 긁을 때마다 경고해요.', s['초과후매결제알림'] === 'Y') +
@@ -592,10 +592,11 @@ h += '<button class="btn ghost" id="logout">이 폰에서 로그아웃</button><
 $('v-settings').innerHTML = h;
 $('saveSet').onclick = function () {
 var o = {};
-['사람1', '사람2', '월급1', '월급2', '월급날', '저축', '알림단계', 'ntfy토픽', '분류목록'].forEach(function (k) { o[k] = $('f_' + k).value.trim(); });
+['사람1', '사람2', '월급1', '월급2', '월급날', '시작일', '저축', '알림단계', 'ntfy토픽', '분류목록'].forEach(function (k) { o[k] = $('f_' + k).value.trim(); });
 o['월급1'] = o['월급1'].replace(/[^\d]/g, ''); o['월급2'] = o['월급2'].replace(/[^\d]/g, '');
 o['저축'] = o['저축'].replace(/[^\d]/g, '') || '0';
 o['월급날'] = String(Math.max(1, Math.min(28, Number(o['월급날'].replace(/[^\d]/g, '')) || 10)));
+o['시작일'] = String(Math.max(1, Math.min(28, Number(o['시작일'].replace(/[^\d]/g, '')) || Number(o['월급날']))));
 ['초과후매결제알림', '결제공유'].forEach(function (k) { o[k] = $('f_' + k).checked ? 'Y' : 'N'; });
 run('saveSettings', { settings: o }, '저장했어요');
 };
