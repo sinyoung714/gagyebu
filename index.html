@@ -818,7 +818,8 @@ function numv(i) { return Number(String(v(i) || '').replace(/[^\d]/g, '')) || 0;
 function estOf(lo, hi) { return Math.ceil((lo + (hi - lo) * 0.7) / 1000) * 1000; }
 function fxView(f) {
 var st = (S.d.summary && S.d.summary.fixedStatus || {})[f.id];
-if (!st || f['문자로기록됨'] !== 'Y' || !(Number(f['최대']) > 0 || st.actual)) return { amt: st ? st.amount : Number(f['금액']), html: won(st ? st.amount : f['금액']) };
+if (!st || f['문자로기록됨'] !== 'Y' || !(Number(f['최대']) > 0 || st.actual || st.later)) return { amt: st ? st.amount : Number(f['금액']), html: won(st ? st.amount : f['금액']) };
+if (st.later) return { amt: 0, html: '<span style="color:var(--sub)">' + won(st.est) + '</span><small style="display:block;text-align:right;color:var(--sub);font-size:11.5px">' + (+st.later.slice(5, 7)) + '월부터</small>' };
 if (st.actual) return { amt: st.amount, html: won(st.amount) + '<small style="display:block;text-align:right;color:var(--good);font-size:11.5px">결제됨</small>' };
 return { amt: st.amount, html: '약 ' + won(st.amount) + '<small style="display:block;text-align:right;color:var(--sub);font-size:11.5px">' + man(f['최소']).replace('원', '') + '~' + man(f['최대']) + '</small>' };
 }
