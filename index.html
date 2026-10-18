@@ -522,18 +522,20 @@ if (srcKeys.length > 1 || (srcKeys.length === 1 && srcKeys[0] !== '미지정')) 
 h += '<div class="card"><h3>대출<button class="add-link" id="addLoan">+ 대출 등록</button></h3>';
 if (!d.loans.length) h += '<div style="color:var(--sub);font-size:14px;padding:6px 0">주택담보대출 등을 등록하면 매달 상환액과 이자가 자동 계산돼요.</div>';
 d.loans.forEach(function (l) {
-var c = loanCalc(l['남은원금'], l['연이율'], l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']);
+var gEnd = /^\d{4}-\d{2}$/.test(String(l['거치끝'] || '')) ? String(l['거치끝']) : '', gr = !!gEnd && S.ym <= gEnd, gm = gr ? ((+gEnd.slice(0, 4) - +S.ym.slice(0, 4)) * 12 + (+gEnd.slice(5, 7) - +S.ym.slice(5, 7)) + 1) : 0;
+var after = loanCalc(l['남은원금'], l['연이율'], l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']), gi = Math.round((Number(l['남은원금']) || 0) * (Number(l['연이율']) || 0) / 1200);
+var c = gr ? { payment: gi, interest: gi, principal: 0 } : after;
 var up = loanCalc(l['남은원금'], Number(l['연이율']) + 0.5, l['남은개월'], l['상환방식'], l['증가율'], l['기준상환액']);
 var sc = loanSchedule(l);
 h += '<div class="item ' + (l['사용'] === 'N' ? 'off' : '') + '" data-loan="' + esc(l.id) + '" style="display:block">';
-h += '<div style="display:flex;justify-content:space-between"><div><div class="t">' + esc(l['이름']) + '</div><div class="s">' + esc(l['상환방식']) + (l['상환방식'] === '체증식' ? '(매달 +' + won(l['증가율']) + ')' : '') + ' · 연 ' + l['연이율'] + '% · 매달 ' + l['납부일'] + '일</div></div><span class="add-link">수정</span></div>';
+h += '<div style="display:flex;justify-content:space-between"><div><div class="t">' + esc(l['이름']) + '</div><div class="s">' + esc(l['상환방식']) + (l['상환방식'] === '체증식' ? '(매달 +' + won(l['증가율']) + ')' : '') + (gEnd ? ' · 거치 ~' + gEnd.replace('-', '.') : '') + ' · 연 ' + l['연이율'] + '% · 매달 ' + l['납부일'] + '일</div></div><span class="add-link">수정</span></div>';
 h += '<div class="loan-grid">' +
 '<div><div class="k">이번 달 상환액</div><div class="v num">' + won(c.payment) + '</div></div>' +
 '<div><div class="k">그중 이자</div><div class="v num" style="color:var(--warn)">' + won(c.interest) + '</div></div>' +
 '<div><div class="k">남은 원금</div><div class="v num">' + man(l['남은원금']) + '</div></div>' +
-'<div><div class="k">앞으로 낼 이자 합계</div><div class="v num">' + man(sc.totalInterest) + '</div></div></div>';
+'<div><div class="k">앞으로 낼 이자 합계</div><div class="v num">' + man(sc.totalInterest + gm * gi) + '</div></div></div>';
 h += spark(sc.balances);
-h += '<div class="note">완납 예정 <b style="color:var(--ink)">' + payoffLabel(l['남은개월']) + '</b> (' + l['남은개월'] + '개월 남음)<br>' + (l['상환방식'] === '체증식' ? '체증식이라 상환액이 매달 <b>' + won(l['증가율']) + '</b>씩 늘어나요. 금리가 바뀌면 연이율만 고치면 돼요.' : '금리가 0.5%p 오르면 월 <b>+' + won(up.payment - c.payment) + '</b>. 금리가 바뀌면 연이율만 고치면 돼요.') + '</div>';
+h += '<div class="note">완납 예정 <b style="color:var(--ink)">' + payoffLabel(Number(l['남은개월']) + gm) + '</b> (' + (Number(l['남은개월']) + gm) + '개월 남음)<br>' + (gr ? '<b>거치기간</b>이라 ' + gEnd.slice(0, 4) + '년 ' + (+gEnd.slice(5, 7)) + '월까지는 이자만 내요. 그 뒤부터 매달 <b>' + won(after.payment) + '</b>씩 원금과 같이 갚아요.<br>' : '') + (l['상환방식'] === '체증식' ? '체증식이라 상환액이 매달 <b>' + won(l['증가율']) + '</b>씩 늘어나요. 금리가 바뀌면 연이율만 고치면 돼요.' : '금리가 0.5%p 오르면 월 <b>+' + won(up.payment - after.payment) + '</b>. 금리가 바뀌면 연이율만 고치면 돼요.') + '</div>';
 h += '</div>';
 });
 h += '</div>';
@@ -796,9 +798,10 @@ var html = '<div class="field"><label>이름</label><input id="x_name" value="' 
 '<div class="two"><div class="field"><label>상환 방식</label><select id="x_m">' + opts(['원리금균등', '원금균등', '체증식', '만기일시'], g['상환방식'] || '원리금균등') + '</select></div>' +
 '<div class="field"><label>매달 납부일</label><input id="x_day" inputmode="numeric" value="' + esc(g['납부일'] || '') + '" placeholder="21"></div></div>' +
 '<div id="x_gwrap"' + ((g['상환방식'] || '') === '체증식' ? '' : ' hidden') + '><div class="two"><div class="field"><label>다음 회차 상환액</label><input id="x_base" inputmode="numeric" value="' + esc(g['기준상환액'] || '') + '" placeholder="예: 674276"></div><div class="field"><label>매달 늘어나는 금액</label><input id="x_g" inputmode="numeric" value="' + esc(g['증가율'] || '') + '" placeholder="예: 2626"></div></div><div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">은행 앱 상환 내역에서 최근 두 달 상환액의 차이가 매달 늘어나는 금액이에요. 남은 기간은 비워 두면 자동으로 계산해요.</div></div>' +
+'<div class="field"><label>거치기간(이자만 내는 기간) 끝나는 달</label><input id="x_grace" type="month" value="' + esc(g['거치끝'] || '') + '"><div class="hint">거치 없는 대출은 비워 두세요. 거치 대출이면 위의 남은 기간은 거치가 끝난 뒤 나눠 갚는 개월 수로 넣으세요.</div></div>' +
 '<div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">납부일마다 상환액이 자동 기록되고 남은 원금·기간도 줄어들어요. 변동금리라면 금리가 바뀔 때 연이율만 고치세요.</div>';
 itemSheet(l ? '대출 수정' : '대출 추가', '대출', l, html, function () {
-var o = { '이름': v('x_name').trim(), '남은원금': v('x_bal'), '연이율': v('x_rate'), '남은개월': v('x_n'), '상환방식': v('x_m'), '납부일': v('x_day'), '증가율': v('x_g'), '기준상환액': v('x_base') };
+var o = { '이름': v('x_name').trim(), '남은원금': v('x_bal'), '연이율': v('x_rate'), '남은개월': v('x_n'), '상환방식': v('x_m'), '납부일': v('x_day'), '증가율': v('x_g'), '기준상환액': v('x_base'), '거치끝': v('x_grace') };
 if (o['상환방식'] === '체증식') { var P0 = Number(String(o['남은원금']).replace(/[^\d]/g, '')), b0 = Number(String(o['기준상환액']).replace(/[^\d]/g, '')), d0 = Number(String(o['증가율']).replace(/[^\d]/g, '')) || 0, rr = (Number(o['연이율']) || 0) / 1200, cnt = 0; if (!b0) { toast('다음 회차 상환액을 입력해 주세요', 'warn'); return null; } while (P0 > 0 && cnt < 600) { var it = Math.round(P0 * rr), pay = Math.min(b0 + d0 * cnt, P0 + it); if (pay <= it) { toast('상환액이 이자보다 적어요. 금액을 확인해 주세요', 'warn'); return null; } P0 -= pay - it; cnt++; } o['남은개월'] = cnt; }
 if (!o['이름'] || !Number(String(o['남은원금']).replace(/[^\d]/g, '')) || !Number(o['남은개월'])) { toast('이름, 남은 원금, 남은 기간을 입력해 주세요', 'warn'); return null; }
 return o;
