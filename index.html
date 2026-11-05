@@ -1181,13 +1181,13 @@ function scanMeasure(c) {
 }
 function scanTick() {
   var sc = S.scan; if (!sc || !sc.on || sc.shot) return;
-  sc.tm = setTimeout(scanTick, 80);
+  sc.tm = setTimeout(scanTick, 50);
   var c = scanCrop(); if (!c) return;
   var m = scanMeasure(c), now = Date.now();
   sc.best = Math.max(sc.best * 0.985, m.sharp);
   var good = m.move < 12 && m.sharp > 30 && m.sharp >= sc.best * 0.5;
   if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 3) sc.holdT = 0;
-  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 400) : 0;
+  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 200) : 0;
   var pg = $('scanProg'); if (pg) pg.style.width = Math.round(prog * 100) + '%';
   $('scanBox').classList.toggle('ok', good);
   if (prog >= 1) scanCapture();
