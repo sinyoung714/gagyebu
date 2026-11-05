@@ -1030,7 +1030,7 @@ function drawShop(pending) {
     '<div class="r-dash"></div><div class="r-code"></div><div class="r-thanks">결제 문자가 오면 이 영수증이 그 결제에 붙어요</div>' +
     '</div><div class="r-zz bot"></div></div>' +
     '<div id="shopOcr"></div>' +
-    '<div id="shopForm" ' + (pending ? '' : 'hidden') + ' class="shop-form"><div class="field"><label>상품</label><input id="s_name" value="' + esc(pending ? pending.name : '') + '" placeholder="예: 우유 1L"></div><div class="two"><div class="field"><label>가격</label><input id="s_price" inputmode="numeric" value="' + (pending && pending.price ? Number(pending.price).toLocaleString('ko-KR') : '') + '" placeholder="2,980"></div><div class="field"><label>수량</label><input id="s_qty" inputmode="numeric" value="1"></div></div>' + (pending && pending.cands && pending.cands.length > 1 ? '<div class="chips wrap" style="margin:-4px 0 10px">' + pending.cands.slice(0, 4).map(function (p) { return '<button class="chip" data-pc="' + p + '">' + won(p) + '</button>'; }).join('') + '</div>' : '') + '<div class="two"><button class="btn ghost" id="s_cancel">취소</button><button class="btn" id="s_add">담기</button></div></div>' +
+    '<div id="shopForm" ' + (pending ? '' : 'hidden') + ' class="shop-form"><div class="field"><label>상품</label><input id="s_name" value="' + esc(pending ? pending.name : '') + '" placeholder="예: 우유 1L"></div><div class="two"><div class="field"><label>가격</label><input id="s_price" inputmode="numeric" value="' + (pending && pending.price ? Number(pending.price).toLocaleString('ko-KR') : '') + '" placeholder="2,980"></div><div class="field"><label>수량</label><input id="s_qty" inputmode="numeric" value="1"></div></div>' + (pending && pending.cands && pending.cands.length > 1 ? '<div class="chips wrap" style="margin:-4px 0 10px">' + pending.cands.slice(0, 4).map(function (p) { return '<button class="chip" data-pc="' + p + '">' + won(p) + '</button>'; }).join('') + '</div>' : '') + '<div class="two"><button class="btn ghost" id="s_cancel">취소</button><button class="btn" id="s_add">담기</button></div>' + (pending && pending.raw ? '<div style="font-size:11.5px;color:var(--sub);margin:2px 0 8px;word-break:break-all">읽은 글자: ' + esc(pending.raw) + '</div>' : '') + '</div>' +
     shopHistory() + '<div style="height:20px"></div></div>' +
     '<div class="shop-actions"><div class="two"><button class="btn" id="shopScan">📷 가격표 스캔</button><button class="btn ghost" id="shopManual">+ 직접 입력</button><input type="file" accept="image/*" capture="environment" id="shopCam" hidden></div><button class="btn dark" id="shopDone"' + (c.items.length ? '' : ' disabled') + '>장보기 끝 · ' + won(tot) + '</button></div>';
   $('shopView').innerHTML = h;
@@ -1150,7 +1150,7 @@ function openScanner() {
     if (!sc.on) { st.getTracks().forEach(function (t) { t.stop(); }); return; }
     sc.stream = st; var vd = $('scanVid'); vd.srcObject = st; var p = vd.play(); if (p && p.catch) p.catch(function () {});
     try { var tr = st.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}; if (cap.focusMode && cap.focusMode.indexOf('continuous') >= 0) tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (e) {}
-    $('scanMsg').textContent = '1초 가만히 있으면 자동으로 찍혀요 · 아래 버튼으로 바로 찍기';
+    $('scanMsg').textContent = '잠깐 멈추면 자동으로 찍혀요 · 버튼으로 바로 찍기';
     scanTick();
   }).catch(function () { stopScanner(); toast('카메라를 쓸 수 없어요. 아이폰 설정에서 카메라를 허용하거나 직접 입력해 주세요', 'warn'); });
 }
@@ -1181,13 +1181,13 @@ function scanMeasure(c) {
 }
 function scanTick() {
   var sc = S.scan; if (!sc || !sc.on || sc.shot) return;
-  sc.tm = setTimeout(scanTick, 120);
+  sc.tm = setTimeout(scanTick, 80);
   var c = scanCrop(); if (!c) return;
   var m = scanMeasure(c), now = Date.now();
   sc.best = Math.max(sc.best * 0.985, m.sharp);
   var good = m.move < 12 && m.sharp > 30 && m.sharp >= sc.best * 0.5;
   if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 3) sc.holdT = 0;
-  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 1000) : 0;
+  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 400) : 0;
   var pg = $('scanProg'); if (pg) pg.style.width = Math.round(prog * 100) + '%';
   $('scanBox').classList.toggle('ok', good);
   if (prog >= 1) scanCapture();
@@ -1209,7 +1209,7 @@ function scanCapture() {
   var bt = $('scanShot'); if (bt) bt.disabled = true;
   var full = null;
   ocrWorker().then(function (w) { return w.recognize(cv, {}, { blocks: true, text: true }); }).then(function (r1) {
-    full = parsePriceTag(r1.data); r1 = null;
+    full = parsePriceTag(r1.data); full.raw = String(r1.data.text || '').replace(/\s+/g, ' ').trim().slice(0, 90); r1 = null;
     return numWorker().then(function (w) { return w.recognize(cv, {}, { blocks: true }); });
   }).then(function (r2) {
     var num = pricesFrom(r2.data); r2 = null;
@@ -1219,7 +1219,7 @@ function scanCapture() {
     else if (num.price && full.cands.indexOf(num.price) >= 0) price = num.price;
     else price = full.price || num.price;
     add(price); full.cands.slice(0, 3).forEach(add); num.cands.slice(0, 3).forEach(add);
-    var out = { name: full.name || '', price: price, cands: cands };
+    var out = { name: full.name || '', price: price, cands: cands, raw: (full.raw || '-') + ' │ 숫자: ' + (num.cands.slice(0, 4).join(', ') || '-') };
     stopScanner(); drawShop(out);
     if (!price) toast('가격을 못 읽었어요. 숫자만 입력해 주세요', 'warn');
   }).catch(function () { stopScanner(); drawShop({ name: full ? full.name : '', price: full ? full.price : 0, cands: full ? full.cands : [] }); toast('잘 못 읽었어요. 확인해서 고쳐 주세요', 'warn'); });
