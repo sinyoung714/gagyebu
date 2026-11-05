@@ -248,6 +248,14 @@ body.shop-on{overflow:hidden}body.shop-on nav.tabbar,body.shop-on .fab{display:n
 .r-code{height:34px;margin:4px auto 6px;width:72%;background:repeating-linear-gradient(90deg,#222 0 2px,transparent 2px 4px,#222 4px 5px,transparent 5px 8px,#222 8px 11px,transparent 11px 12px)}.r-thanks{text-align:center;font-size:11.5px;color:#888}
 .shop-actions{position:relative;z-index:4;padding:10px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(236,231,220,.96);border-top:1px solid rgba(0,0,0,.06);display:grid;gap:8px}.shop-actions .two{margin:0}.btn.dark{background:#1f2937;color:#fff}
 #shopView .shop-form{max-width:420px;margin:0 auto 12px;background:#fff}#shopView .list-date,#shopView .list-group{max-width:420px;margin-left:auto;margin-right:auto}#shopView .ocr-wait{max-width:420px;margin:0 auto 10px;background:#fff}
+#scanView{position:fixed;inset:0;z-index:30;background:#000;overflow:hidden}#scanVid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scan-mask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}.scan-box{position:relative;width:84%;max-width:420px;height:34%;max-height:300px;border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.55);transition:box-shadow .2s}
+.scan-box i{position:absolute;width:28px;height:28px;border:4px solid #fff;border-radius:6px}.scan-box i:nth-child(1){left:-2px;top:-2px;border-right:0;border-bottom:0}.scan-box i:nth-child(2){right:-2px;top:-2px;border-left:0;border-bottom:0}.scan-box i:nth-child(3){left:-2px;bottom:-2px;border-right:0;border-top:0}.scan-box i:nth-child(4){right:-2px;bottom:-2px;border-left:0;border-top:0}
+.scan-box.ok i{border-color:#facc15}.scan-box.done i{border-color:#22c55e}.scan-box.done{box-shadow:0 0 0 9999px rgba(0,0,0,.55),inset 0 0 0 4px #22c55e}
+.scan-line{position:absolute;left:6%;right:6%;height:2px;background:linear-gradient(90deg,transparent,#facc15,transparent);animation:scanMove 1.8s ease-in-out infinite}@keyframes scanMove{0%,100%{top:12%}50%{top:86%}}
+.scan-top{position:absolute;left:0;right:0;top:0;padding:calc(12px + env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;gap:12px;color:#fff;font-weight:600;font-size:15px}.scan-top button{width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:18px}
+.scan-msg{position:absolute;left:16px;right:16px;bottom:calc(96px + env(safe-area-inset-bottom));text-align:center;color:#fff;font-size:15px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.scan-bot{position:absolute;left:16px;right:16px;bottom:calc(20px + env(safe-area-inset-bottom))}.scan-bot .btn{background:rgba(255,255,255,.92);color:#111}
 .shop-btn{width:100%;display:flex;align-items:center;gap:12px;border:0;background:var(--card);box-shadow:var(--shadow);border-radius:18px;padding:14px 16px;margin:0 0 12px;text-align:left;cursor:pointer;color:var(--ink);font:inherit}
 .shop-btn>span:first-child{font-size:24px}.shop-btn .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.shop-btn .mid b{font-size:15px}.shop-btn .mid small{color:var(--sub);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shop-btn .go{color:var(--sub);font-size:22px}
 .shop-top{background:var(--hero);color:#fff;border-radius:18px;padding:16px 18px;margin:0 0 12px}.shop-top small{opacity:.8;font-size:13px}.shop-total{font-size:32px;font-weight:800;letter-spacing:-.02em}
@@ -1021,11 +1029,12 @@ function drawShop(pending) {
     '<div id="shopOcr"></div>' +
     '<div id="shopForm" ' + (pending ? '' : 'hidden') + ' class="shop-form"><div class="field"><label>상품</label><input id="s_name" value="' + esc(pending ? pending.name : '') + '" placeholder="예: 우유 1L"></div><div class="two"><div class="field"><label>가격</label><input id="s_price" inputmode="numeric" value="' + (pending && pending.price ? Number(pending.price).toLocaleString('ko-KR') : '') + '" placeholder="2,980"></div><div class="field"><label>수량</label><input id="s_qty" inputmode="numeric" value="1"></div></div>' + (pending && pending.cands && pending.cands.length > 1 ? '<div class="chips wrap" style="margin:-4px 0 10px">' + pending.cands.slice(0, 4).map(function (p) { return '<button class="chip" data-pc="' + p + '">' + won(p) + '</button>'; }).join('') + '</div>' : '') + '<div class="two"><button class="btn ghost" id="s_cancel">취소</button><button class="btn" id="s_add">담기</button></div></div>' +
     shopHistory() + '<div style="height:20px"></div></div>' +
-    '<div class="shop-actions"><div class="two"><label class="btn" style="text-align:center;cursor:pointer">📷 가격표 찍기<input type="file" accept="image/*" capture="environment" id="shopCam" hidden></label><button class="btn ghost" id="shopManual">+ 직접 입력</button></div><button class="btn dark" id="shopDone"' + (c.items.length ? '' : ' disabled') + '>장보기 끝 · ' + won(tot) + '</button></div>';
+    '<div class="shop-actions"><div class="two"><button class="btn" id="shopScan">📷 가격표 스캔</button><button class="btn ghost" id="shopManual">+ 직접 입력</button><input type="file" accept="image/*" capture="environment" id="shopCam" hidden></div><button class="btn dark" id="shopDone"' + (c.items.length ? '' : ' disabled') + '>장보기 끝 · ' + won(tot) + '</button></div>';
   $('shopView').innerHTML = h;
   paintShop();
   $('shopBud').onchange = function () { var n = numv('shopBud'); ls('hb_shop_bud', n ? String(n) : null); drawShop(); if (n && cartTotal() > n) flashShop(); };
   $('shopManual').onclick = function () { $('shopForm').hidden = false; $('s_name').focus(); };
+  $('shopScan').onclick = function () { openScanner(); };
   $('shopCam').onchange = function (e) { var inp = e.target, f = inp.files && inp.files[0]; if (f) ocrPriceTag(f, function () { try { inp.value = ''; } catch (x) {} }); };
   var preview = function () { if ($('s_price')) paintShop(numv('s_price') * Math.max(1, numv('s_qty') || 1)); };
   if ($('s_price')) { $('s_price').oninput = preview; $('s_qty').oninput = preview; preview(); }
@@ -1105,6 +1114,87 @@ function ocrPriceTag(file, done) {
     drawShop({ name: g.name, price: g.price, cands: g.cands });
   }).catch(function (e) { if (cvs) { cvs.width = 0; cvs.height = 0; cvs = null; } file = null; if (done) done(); box.innerHTML = ''; toast(errMsg(e) + ' · 직접 입력해 주세요', 'warn'); drawShop({ name: '', price: 0 }); });
 }
+/* 가격표 실시간 스캔 (사진 저장 없음) */
+function ocrWorker() { return loadOcr().then(function () { return S.ocrW || (S.ocrW = Tesseract.createWorker(['kor', 'eng'])); }); }
+function openScanner() {
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { var fi = $('shopCam'); if (fi) fi.click(); return; }
+  var el = document.createElement('div'); el.id = 'scanView';
+  el.innerHTML = '<video id="scanVid" playsinline muted autoplay></video><div class="scan-mask"><div class="scan-box" id="scanBox"><i></i><i></i><i></i><i></i><div class="scan-line"></div></div></div>' +
+    '<div class="scan-top"><button id="scanX" aria-label="닫기">✕</button><span>가격표를 네모 안에 맞춰 주세요</span></div>' +
+    '<div class="scan-msg" id="scanMsg">카메라 켜는 중…</div><div class="scan-bot"><button class="btn ghost" id="scanManual">직접 입력</button></div>';
+  document.body.appendChild(el);
+  var sc = S.scan = { on: true, busy: false, hits: {}, prev: null, t0: Date.now() };
+  $('scanX').onclick = function () { stopScanner(); };
+  $('scanManual').onclick = function () { stopScanner(); drawShop({ name: '', price: 0 }); setTimeout(function () { if ($('s_name')) $('s_name').focus(); }, 50); };
+  try { var AC = window.AudioContext || window.webkitAudioContext; if (AC) { sc.ac = new AC(); sc.ac.resume && sc.ac.resume(); } } catch (e) {}
+  ocrWorker().then(function () { if (sc.on) sc.ready = true; }).catch(function () { if (sc.on) { $('scanMsg').textContent = '인식 도구를 못 불러왔어요 · 직접 입력해 주세요'; } });
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (st) {
+    if (!sc.on) { st.getTracks().forEach(function (t) { t.stop(); }); return; }
+    sc.stream = st; var vd = $('scanVid'); vd.srcObject = st; var p = vd.play(); if (p && p.catch) p.catch(function () {});
+    try { var tr = st.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}; if (cap.focusMode && cap.focusMode.indexOf('continuous') >= 0) tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (e) {}
+    $('scanMsg').textContent = '가격표에 초점이 맞으면 자동으로 읽어요';
+    scanTick();
+  }).catch(function () { stopScanner(); toast('카메라를 쓸 수 없어요. 아이폰 설정에서 카메라를 허용하거나 직접 입력해 주세요', 'warn'); });
+}
+function stopScanner() {
+  var sc = S.scan; if (sc) { sc.on = false; clearTimeout(sc.tm); if (sc.stream) sc.stream.getTracks().forEach(function (t) { t.stop(); }); sc.stream = null; if (sc.cv) { sc.cv.width = 0; sc.cv.height = 0; } if (sc.sm) { sc.sm.width = 0; sc.sm.height = 0; } try { sc.ac && sc.ac.close(); } catch (e) {} }
+  S.scan = null; var el = $('scanView'); if (el) { var vd = $('scanVid'); if (vd) vd.srcObject = null; el.remove(); }
+}
+function scanBeep() { var sc = S.scan; try { if (!sc || !sc.ac) return; var o = sc.ac.createOscillator(), g = sc.ac.createGain(); o.frequency.value = 1320; g.gain.value = 0.12; o.connect(g); g.connect(sc.ac.destination); o.start(); o.stop(sc.ac.currentTime + 0.12); } catch (e) {} try { navigator.vibrate && navigator.vibrate(60); } catch (e) {} }
+function scanCrop() {
+  var vd = $('scanVid'), bx = $('scanBox'); if (!vd || !bx || !vd.videoWidth) return null;
+  var vr = vd.getBoundingClientRect(), br = bx.getBoundingClientRect(), vw = vd.videoWidth, vh = vd.videoHeight;
+  var s = Math.max(vr.width / vw, vr.height / vh), ox = (vr.width - vw * s) / 2, oy = (vr.height - vh * s) / 2;
+  var x = Math.max(0, (br.left - vr.left - ox) / s), y = Math.max(0, (br.top - vr.top - oy) / s), w = Math.min(vw - x, br.width / s), h = Math.min(vh - y, br.height / s);
+  return w > 20 && h > 20 ? { vd: vd, x: x, y: y, w: w, h: h } : null;
+}
+function scanMeasure(c) {
+  var sc = S.scan, W = 160, H = Math.max(20, Math.round(W * c.h / c.w));
+  var cv = sc.sm || (sc.sm = document.createElement('canvas')); cv.width = W; cv.height = H;
+  var cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(c.vd, c.x, c.y, c.w, c.h, 0, 0, W, H);
+  var d = cx.getImageData(0, 0, W, H).data, g = new Float32Array(W * H), i, j;
+  for (i = 0, j = 0; i < d.length; i += 4, j++) g[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  var sum = 0, sq = 0, n = 0, diff = 0;
+  for (var yy = 1; yy < H - 1; yy++) for (var xx = 1; xx < W - 1; xx++) { var k = yy * W + xx, l = 4 * g[k] - g[k - 1] - g[k + 1] - g[k - W] - g[k + W]; sum += l; sq += l * l; n++; }
+  var sharp = n ? sq / n - (sum / n) * (sum / n) : 0;
+  if (sc.prev && sc.prev.length === g.length) { for (j = 0; j < g.length; j += 3) diff += Math.abs(g[j] - sc.prev[j]); diff /= g.length / 3; } else diff = 99;
+  sc.prev = g;
+  return { sharp: sharp, move: diff };
+}
+function scanTick() {
+  var sc = S.scan; if (!sc || !sc.on) return;
+  sc.tm = setTimeout(scanTick, 220);
+  if (sc.busy || !sc.ready) return;
+  var c = scanCrop(); if (!c) return;
+  var m = scanMeasure(c);
+  sc.best = Math.max((sc.best || 0) * 0.97, m.sharp);
+  var focused = m.sharp > 60 && m.sharp >= sc.best * 0.55, still = m.move < 9;
+  $('scanBox').classList.toggle('ok', focused && still);
+  if (!(focused && still)) return;
+  sc.busy = true;
+  var W = Math.min(1000, Math.round(c.w * 2)), H = Math.round(W * c.h / c.w);
+  var cv = sc.cv || (sc.cv = document.createElement('canvas')); cv.width = W; cv.height = H;
+  var cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(c.vd, c.x, c.y, c.w, c.h, 0, 0, W, H);
+  var id = cx.getImageData(0, 0, W, H), p = id.data;
+  for (var i = 0; i < p.length; i += 4) { var gg = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; gg = gg > 150 ? 255 : gg < 90 ? 0 : (gg - 90) * 4.25; p[i] = p[i + 1] = p[i + 2] = gg; }
+  cx.putImageData(id, 0, 0); id = null; p = null;
+  ocrWorker().then(function (w) { return w.recognize(cv, {}, { blocks: true, text: true }); }).then(function (res) {
+    if (!S.scan || !S.scan.on) return;
+    var g = parsePriceTag(res.data); res = null;
+    if (g.price) {
+      sc.hits[g.price] = (sc.hits[g.price] || 0) + 1;
+      if (!sc.name || g.name.length > sc.name.length) sc.name = g.name;
+      $('scanMsg').textContent = '확인 중… ' + won(g.price);
+      if (sc.hits[g.price] >= 2 || (g.won && g.conf >= 3)) {
+        scanBeep(); var bx = $('scanBox'); if (bx) bx.classList.add('done');
+        var out = { name: sc.name || g.name, price: g.price, cands: g.cands };
+        setTimeout(function () { stopScanner(); drawShop(out); }, 250);
+        return;
+      }
+    } else $('scanMsg').textContent = '가격을 찾는 중… 가격 숫자가 크게 보이게 가까이';
+    sc.busy = false;
+  }).catch(function () { if (S.scan) S.scan.busy = false; });
+}
 function parsePriceTag(data) {
   var lines = [];
   (data.blocks || []).forEach(function (b) { (b.paragraphs || []).forEach(function (p) { (p.lines || []).forEach(function (l) { lines.push({ text: l.text.trim(), h: l.bbox ? l.bbox.y1 - l.bbox.y0 : 0 }); }); }); });
@@ -1124,14 +1214,15 @@ function guessTag(lines) {
       if (/판매가|할인가|특가|행사가|가격|최종/.test(t)) sc *= 1.8;
       if (/당|100\s*[gGmM]|10\s*[gGmM]|[gG]\s*당|ml당|단위|정상가|원가|포인트|적립/.test(ctx)) sc *= 0.3;
       if (/\d{4}[.\-/]\d{1,2}|\d{2,4}-\d{3,4}|바코드|\d{8,}/.test(ctx)) sc *= 0.1;
-      cands.push({ n: n, s: sc });
+      cands.push({ n: n, s: sc, w: !!m[2] });
     }
   });
   cands.sort(function (a, b) { return b.s - a.s; });
   var uniq = []; cands.forEach(function (c) { if (uniq.indexOf(c.n) < 0) uniq.push(c.n); });
   var names = lines.map(function (l) { var t = l.text.replace(/\d{1,3}(?:,\d{3})+\s*원?|\d+\s*원/g, ' ').replace(/판매가|할인가|정상가|특가|행사가|가격|원산지.*$|단위가격.*$|[|:;*#_=~<>\[\](){}]/g, ' ').replace(/\s+/g, ' ').trim(); return { t: t, k: (t.match(/[가-힣]/g) || []).length, h: l.h }; })
     .filter(function (x) { return x.k >= 2; }).sort(function (a, b) { return (b.k * (b.h || 10)) - (a.k * (a.h || 10)); });
-  return { price: uniq[0] || 0, cands: uniq, name: names[0] ? names[0].t.slice(0, 30) : '' };
+  var sec = cands.find(function (c) { return c.n !== uniq[0]; });
+  return { won: !!(cands[0] && cands[0].w), conf: cands[0] ? cands[0].s / ((sec && sec.s) || 1) : 0, price: uniq[0] || 0, cands: uniq, name: names[0] ? names[0].t.slice(0, 30) : '' };
 }
 function basketHtml(txId) {
   var b = (S.d.baskets || []).find(function (x) { return x.txId === txId; }); if (!b) return '';
