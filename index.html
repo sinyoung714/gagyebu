@@ -1192,37 +1192,113 @@ function scanTick() {
   $('scanBox').classList.toggle('ok', good);
   if (prog >= 1) scanCapture();
 }
+/* 가격 판독: 여러 크기·방식으로 읽고 투표 + 할인가(정상가−할인) 계산 */
+var PRICE_PASSES = [[260, 1, '11'], [260, 1, '6'], [380, 1, '6'], [260, 1.4, '11'], [380, 1, '11']];
+function scaledCv(src, H, sx) {
+  var w = Math.max(1, Math.round(src.width * H / src.height * sx)), b = 16, cv = document.createElement('canvas');
+  cv.width = w + b * 2; cv.height = H + b * 2;
+  var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+  cx.imageSmoothingQuality = 'high'; cx.drawImage(src, b, b, w, H);
+  return cv;
+}
+function pNorm(raw) {
+  var t = raw.replace(/[^\d,.]/g, ''), m = t.match(/\d{1,3}(?:[,.]\d{3})+/);
+  if (m) return { d: m[0].replace(/[,.]/g, ''), com: true };
+  var d = t.replace(/[,.]/g, ''); if (d.length >= 5) return null;
+  if (d.length === 4 && d.slice(-1) !== '0' && d.slice(-2, -1) === '0') d = d.slice(0, -1);
+  return d ? { d: d, com: false } : null;
+}
+function passInfo(data) {
+  var lines = [], maxH = 1, toks = [];
+  (data.blocks || []).forEach(function (b) { (b.paragraphs || []).forEach(function (p) { (p.lines || []).forEach(function (l) { lines.push((l.words || []).map(function (w) { var h = w.bbox ? w.bbox.y1 - w.bbox.y0 : 0; if (h > maxH) maxH = h; return { t: String(w.text || ''), h: h }; })); }); }); });
+  var take = function (raw, h) {
+    raw = String(raw).trim(); if (!raw || raw.indexOf('/') >= 0) return;
+    var neg = raw.charAt(0) === '-', r = pNorm(raw); if (!r) return;
+    var n = Number(r.d); if (!(n >= 100 && n <= 3000000) || n % 10) return;
+    toks.push({ d: r.d, h: h, neg: neg, com: r.com });
+  };
+  lines.forEach(function (ws) {
+    ws.forEach(function (w) { take(w.t, w.h); });
+    var run = [];
+    ws.concat([{ t: '', h: 0 }]).forEach(function (w) {
+      if (w.h >= maxH * 0.6 && /\d/.test(w.t)) run.push(w);
+      else { if (run.length > 1) take(run.map(function (x) { return x.t; }).join(''), Math.max.apply(null, run.map(function (x) { return x.h; }))); run = []; }
+    });
+  });
+  var best = null;
+  toks.forEach(function (t) { if (t.neg) return; if (!best || t.h > best.h * 1.08 || (t.h >= best.h * 0.92 && t.d.length > best.d.length)) best = t; });
+  return { big: best ? best.d : '', bigH: best ? best.h : 0, neg: toks.filter(function (t) { return t.neg && t.com; }).map(function (t) { return t.d; }), pos: toks.filter(function (t) { return !t.neg && t.com; }) };
+}
+function voteDigits(list) {
+  list = list.filter(Boolean); if (!list.length) return '';
+  var lens = {}; list.forEach(function (d) { lens[d.length] = (lens[d.length] || 0) + 1; });
+  var L = 0, bn = -1;
+  Object.keys(lens).forEach(function (k) { k = +k; var n = lens[k] + 0.5 * list.filter(function (d) { return d.length < k; }).length; if (n > bn || (n === bn && k > L)) { bn = n; L = k; } });
+  var out = '';
+  for (var i = 0; i < L; i++) {
+    var cnt = {};
+    list.forEach(function (d) { var j = d.length - 1 - i; if (j < 0) return; cnt[d[j]] = (cnt[d[j]] || 0) + (d.length === L ? 1 : 0.6); });
+    out = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; })[0] + out;
+  }
+  return out;
+}
+function decidePrice(infos) {
+  var big = voteDigits(infos.map(function (i) { return i.big; })), bigN = Number(big) || 0;
+  var mode = function (arr) { var c = {}; arr.forEach(function (x) { c[x] = (c[x] || 0) + 1; }); var k = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0]; return k ? Number(k) : 0; };
+  var cands = [];
+  var add = function (n) { if (n > 0 && cands.indexOf(n) < 0) cands.push(n); };
+  var disc = mode([].concat.apply([], infos.map(function (i) { return i.neg; })));
+  var price = bigN;
+  if (disc) {
+    var origs = [].concat.apply([], infos.map(function (i) { return i.pos.filter(function (t) { return t.h < i.bigH * 0.75; }).map(function (t) { return t.d; }); }));
+    var o = mode(origs) || bigN, c = o - disc;
+    if (c > 0 && (!big || String(c).slice(-3) === big.slice(-3) || o === bigN)) price = c;
+    add(price); add(o); add(bigN);
+  } else add(price);
+  infos.forEach(function (i) { add(Number(i.big)); });
+  return { price: price, cands: cands.slice(0, 4), disc: disc };
+}
 function scanCapture() {
   var sc = S.scan; if (!sc || !sc.on || sc.shot) return;
   var c = scanCrop(); if (!c) { toast('카메라가 아직 준비 중이에요', 'warn'); return; }
   sc.shot = true; clearTimeout(sc.tm); scanBeep();
-  var W = Math.max(900, Math.min(1500, Math.round(c.w))), H = Math.round(W * c.h / c.w);
+  var W = Math.min(1400, Math.round(c.w)), H = Math.round(W * c.h / c.w);
   var cv = sc.cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   var cx = cv.getContext('2d', { willReadFrequently: true });
   try { cx.filter = 'grayscale(1) contrast(1.5)'; } catch (e) {}
   cx.drawImage(c.vd, c.x, c.y, c.w, c.h, 0, 0, W, H);
   if (cx.filter !== 'grayscale(1) contrast(1.5)') { var id = cx.getImageData(0, 0, W, H), p = id.data; for (var i = 0; i < p.length; i += 4) { var v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128)); p[i] = p[i + 1] = p[i + 2] = v; } cx.putImageData(id, 0, 0); id = null; }
-  sharpenCv(cv, 0.8);
+  sc.cv = null;
   try { c.vd.pause(); } catch (e) {}
   if (sc.stream) { sc.stream.getTracks().forEach(function (t) { t.stop(); }); sc.stream = null; }
-  $('scanBox').classList.add('done'); $('scanMsg').textContent = '읽고 정리하는 중…';
+  $('scanBox').classList.add('done'); $('scanMsg').textContent = '가격 읽는 중…';
   var bt = $('scanShot'); if (bt) bt.disabled = true;
-  var full = null;
-  ocrWorker().then(function (w) { return w.recognize(cv, {}, { blocks: true, text: true }); }).then(function (r1) {
-    full = parsePriceTag(r1.data); full.raw = String(r1.data.text || '').replace(/\s+/g, ' ').trim().slice(0, 90); r1 = null;
-    return numWorker().then(function (w) { return w.recognize(cv, {}, { blocks: true }); });
-  }).then(function (r2) {
-    var num = pricesFrom(r2.data); r2 = null;
-    var price = 0, cands = [];
-    var add = function (n) { if (n && cands.indexOf(n) < 0) cands.push(n); };
-    if (full.price && (num.cands.indexOf(full.price) >= 0 || full.won)) price = full.price;
-    else if (num.price && full.cands.indexOf(num.price) >= 0) price = num.price;
-    else price = full.price || num.price;
-    add(price); full.cands.slice(0, 3).forEach(add); num.cands.slice(0, 3).forEach(add);
-    var out = { name: full.name || '', price: price, cands: cands, raw: (full.raw || '-') + ' │ 숫자: ' + (num.cands.slice(0, 4).join(', ') || '-') };
-    stopScanner(); drawShop(out);
-    if (!price) toast('가격을 못 읽었어요. 숫자만 입력해 주세요', 'warn');
-  }).catch(function () { stopScanner(); drawShop({ name: full ? full.name : '', price: full ? full.price : 0, cands: full ? full.cands : [] }); toast('잘 못 읽었어요. 확인해서 고쳐 주세요', 'warn'); });
+  var infos = [], k = 0, wk;
+  var step = function () {
+    if (!S.scan) return Promise.resolve();
+    var allSame = infos.length >= 3 && infos.every(function (i) { return i.big && i.big === infos[0].big && !i.neg.length; });
+    if (k >= PRICE_PASSES.length || allSame) return Promise.resolve();
+    var ps = PRICE_PASSES[k++], sv = scaledCv(cv, Math.min(ps[0], Math.max(120, cv.height)), ps[1]);
+    return wk.setParameters({ tessedit_pageseg_mode: ps[2] }).then(function () { return wk.recognize(sv, {}, { blocks: true }); }).then(function (r) {
+      sv.width = 0; sv.height = 0; infos.push(passInfo(r.data)); r = null;
+      var m = $('scanMsg'); if (m) m.textContent = '가격 읽는 중… ' + k + '/' + PRICE_PASSES.length;
+      return step();
+    });
+  };
+  numWorker().then(function (w) { wk = w; return step(); }).then(function () {
+    var d = decidePrice(infos), nameCv = scaledCv(cv, Math.min(560, cv.height), 1);
+    cv.width = 0; cv.height = 0; cv = null;
+    var raw = '큰 숫자: ' + (infos.map(function (i) { return i.big || '-'; }).join(', ')) + (d.disc ? ' · 할인 -' + d.disc.toLocaleString('ko-KR') : '');
+    stopScanner(); drawShop({ name: '', price: d.price, cands: d.cands, raw: raw });
+    if (!d.price) toast('가격을 못 읽었어요. 숫자만 입력해 주세요', 'warn');
+    var el0 = $('s_name'); if (el0) el0.placeholder = '상품명 읽는 중… (그냥 담아도 돼요)';
+    sharpenCv(nameCv, 0.8);
+    ocrWorker().then(function (w) { return w.recognize(nameCv, {}, { blocks: true, text: true }); }).then(function (r1) {
+      nameCv.width = 0; nameCv.height = 0; nameCv = null;
+      var t = parsePriceTag(r1.data); r1 = null;
+      var el = $('s_name'); if (el) { if (!el.value && t.name) el.value = t.name; el.placeholder = '예: 우유 1L'; }
+    }).catch(function () { if (nameCv) { nameCv.width = 0; nameCv.height = 0; nameCv = null; } var el = $('s_name'); if (el) el.placeholder = '예: 우유 1L'; });
+  }).catch(function () { if (cv) { cv.width = 0; cv.height = 0; } stopScanner(); drawShop({ name: '', price: 0 }); toast('잘 못 읽었어요. 직접 입력해 주세요', 'warn'); });
 }
 function pricesFrom(data) {
   var lines = [], maxH = 1;
@@ -1274,8 +1350,9 @@ function guessTag(lines) {
   });
   cands.sort(function (a, b) { return b.s - a.s; });
   var uniq = []; cands.forEach(function (c) { if (uniq.indexOf(c.n) < 0) uniq.push(c.n); });
-  var names = lines.map(function (l) { var t = l.text.replace(/\d{1,3}(?:,\d{3})+\s*원?|\d+\s*원/g, ' ').replace(/판매가|할인가|정상가|특가|행사가|가격|원산지.*$|단위가격.*$|[|:;*#_=~<>\[\](){}]/g, ' ').replace(/\s+/g, ' ').trim(); return { t: t, k: (t.match(/[가-힣]/g) || []).length, h: l.h }; })
-    .filter(function (x) { return x.k >= 2; }).sort(function (a, b) { return (b.k * (b.h || 10)) - (a.k * (a.h || 10)); });
+  var clean = lines.map(function (l, i) { var t = l.text.replace(/\d{1,3}(?:,\d{3})+\s*원?|\d+\s*원/g, ' ').replace(/판매가|할인가|정상가|특가|행사가|가격|원산지.*$|단위가격.*$|단가.*$|[|:;*#_=~<>\[\](){}]/g, ' ').replace(/\s+/g, ' ').trim(); return { i: i, t: t, k: (t.match(/[가-힣]/g) || []).length, h: l.h }; });
+  var names = clean.filter(function (x) { return x.k >= 2 && !/할인\s*행사|행사|할인|개당|포인트|적립|원산지/.test(x.t); }).sort(function (a, b) { return (b.k * (b.h || 10)) - (a.k * (a.h || 10)); });
+  if (names[0]) { var nx = clean[names[0].i + 1]; if (nx && nx.t.length <= 24 && /\d+\s*(MG|mg|ML|ml|G|g|KG|kg|L|개|입|캡슐|매|롤|팩|EA|ea|구|병|캔)/.test(nx.t)) names[0] = { t: names[0].t + ' ' + nx.t, k: names[0].k, h: names[0].h }; }
   var sec = cands.find(function (c) { return c.n !== uniq[0]; });
   return { won: !!(cands[0] && cands[0].w), conf: cands[0] ? cands[0].s / ((sec && sec.s) || 1) : 0, price: uniq[0] || 0, cands: uniq, name: names[0] ? names[0].t.slice(0, 30) : '' };
 }
