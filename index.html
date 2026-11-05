@@ -1181,15 +1181,21 @@ function scanMeasure(c) {
 }
 function scanTick() {
   var sc = S.scan; if (!sc || !sc.on || sc.shot) return;
-  sc.tm = setTimeout(scanTick, 50);
+  sc.tm = setTimeout(scanTick, 60);
   var c = scanCrop(); if (!c) return;
   var m = scanMeasure(c), now = Date.now();
-  sc.best = Math.max(sc.best * 0.985, m.sharp);
-  var good = m.move < 12 && m.sharp > 30 && m.sharp >= sc.best * 0.5;
-  if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 3) sc.holdT = 0;
-  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 200) : 0;
+  if (!sc.live) { sc.live = now; sc.hist = []; }
+  sc.hist.push({ t: now, s: m.sharp, mv: m.move }); while (sc.hist.length && now - sc.hist[0].t > 1500) sc.hist.shift();
+  var peak = Math.max.apply(null, sc.hist.map(function (x) { return x.s; })), prev = sc.hist.length > 1 ? sc.hist[sc.hist.length - 2].s : 0;
+  var warm = now - sc.live > 900;
+  var still = m.move < 6;
+  var focused = m.sharp > 45 && m.sharp >= peak * 0.85 && prev > 0 && Math.abs(m.sharp - prev) / prev < 0.15;
+  var good = warm && still && focused;
+  if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 2) sc.holdT = 0;
+  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 350) : 0;
   var pg = $('scanProg'); if (pg) pg.style.width = Math.round(prog * 100) + '%';
   $('scanBox').classList.toggle('ok', good);
+  var msg = $('scanMsg'); if (msg && !sc.shot) msg.textContent = !warm ? '카메라 맞추는 중…' : !still ? '가격표에 맞추고 멈춰 주세요' : !focused ? '초점 맞추는 중…' : '좋아요, 그대로…';
   if (prog >= 1) scanCapture();
 }
 /* 가격 판독: 여러 크기·방식으로 읽고 투표 + 할인가(정상가−할인) 계산 */
