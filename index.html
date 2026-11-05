@@ -259,6 +259,7 @@ body.shop-on{overflow:hidden}body.shop-on nav.tabbar,body.shop-on .fab{display:n
 .scan-prog{position:absolute;left:0;bottom:-10px;height:4px;width:0;background:#22c55e;border-radius:3px;transition:width .12s linear}
 .scan-bot{display:flex;align-items:center;justify-content:space-between;gap:12px}.scan-bot .btn{width:96px;padding:12px 0;font-size:14px}
 .scan-shot{width:74px;height:74px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.35);box-shadow:0 0 0 3px rgba(0,0,0,.25);cursor:pointer;flex:none}.scan-shot:active{background:#fff}.scan-shot:disabled{opacity:.4}
+.push-box{background:var(--soft);border-radius:12px;padding:12px 14px;margin:0 0 10px;font-size:14px}.push-box b{display:block}.push-box small{display:block;color:var(--sub);font-size:12.5px;margin-top:4px}.push-box ol{margin:6px 0 4px;padding-left:20px;font-size:13.5px}
 .shop-btn{width:100%;display:flex;align-items:center;gap:12px;border:0;background:var(--card);box-shadow:var(--shadow);border-radius:18px;padding:14px 16px;margin:0 0 12px;text-align:left;cursor:pointer;color:var(--ink);font:inherit}
 .shop-btn>span:first-child{font-size:24px}.shop-btn .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.shop-btn .mid b{font-size:15px}.shop-btn .mid small{color:var(--sub);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shop-btn .go{color:var(--sub);font-size:22px}
 .shop-top{background:var(--hero);color:#fff;border-radius:18px;padding:16px 18px;margin:0 0 12px}.shop-top small{opacity:.8;font-size:13px}.shop-total{font-size:32px;font-weight:800;letter-spacing:-.02em}
@@ -633,7 +634,8 @@ fld('알림단계', '알림 받을 사용률 (%)', s['알림단계'], '', '쉼�
 tog('초과후매결제알림', '예산 넘은 뒤엔 결제마다 알림', '100%를 넘으면 카드를 긁을 때마다 경고해요.', s['초과후매결제알림'] === 'Y') +
 tog('결제공유', '결제할 때마다 서로에게 알림', '경고가 아니어도 상대방 결제를 실시간으로 받아요.', s['결제공유'] === 'Y') +
 fld('ntfy토픽', 'ntfy 채널 (선택)', s['ntfy토픽'], '', '비워 둬도 돼요. 홈 화면 앱에서 “폰 알림 켜기”만 누르면 두 분 폰에 배너와 진동으로 알려요.') +
-'<button class="btn ghost small" id="testNtfy">테스트 알림 보내기</button></div>';
+'<div id="pushBox" class="push-box"></div>' +
+'<button class="btn ghost small" id="testNtfy">이 폰으로 테스트 알림</button></div>';
 h += '<div class="card"><h3>분류</h3>' + fld('분류목록', '분류 목록 (쉼표로 구분)', s['분류목록']) + '</div>';
 h += catBudgetCard(s);
 h += '<button class="btn" id="saveSet">설정 저장</button><div style="height:12px"></div>';
@@ -659,8 +661,12 @@ o['월급날'] = String(Math.max(1, Math.min(28, Number(o['월급날'].replace(/
 o['분류예산'] = collectCatBudgets();
 run('saveSettings', { settings: o }, '저장했어요');
 };
+drawPushBox();
 $('testNtfy').onclick = function () {
-run('testNtfy').then(function (r) { if (r) toast(r.sent ? '보냈어요. 폰에 알림이 왔는지 확인하세요' : '알림 받을 폰이 아직 없어요. 홈 화면 앱 아래쪽 “폰 알림 켜기”를 눌러 주세요', r.sent ? '' : 'warn'); });
+pushEndpoint().then(function (ep) {
+if (!ep) { toast('이 폰은 아직 알림 연결이 안 됐어요. 위의 “이 폰 알림 켜기”를 먼저 눌러 주세요', 'warn'); return; }
+return run('testNtfy', { endpoint: ep }).then(function (r) { if (!r) return; if (r.sent || r.queued) toast('보냈어요! 몇 초 안에 알림이 와요. 안 오면 “다시 연결”을 눌러 주세요'); else toast('알림을 못 보냈어요' + (r.status ? ' (' + r.status + ')' : '') + '. “다시 연결”을 눌러 주세요', 'warn'); });
+});
 };
 $('addCard').onclick = function () { openCard(); };
 Array.prototype.forEach.call($('v-settings').querySelectorAll('[data-card]'), function (el) { el.onclick = function () { openCard(el.getAttribute('data-card')); }; });
@@ -934,9 +940,26 @@ function pushSubscribe(quiet) {
 return navigator.serviceWorker.ready.then(function (reg) {
 return reg.pushManager.getSubscription().then(function (s) { return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(VAPID) }); });
 }).then(function (sub) {
-return fetch(API, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'subscribe', key: AUTH.key, person: AUTH.person, sub: sub.toJSON() }) });
-}).then(function () { $('bell').hidden = true; if (!quiet) toast('알림이 켜졌어요. 설정 › 테스트 알림으로 확인해 보세요.'); })
-.catch(function () { if (!quiet) toast('알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.', 'warn'); });
+return fetch(API, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'subscribe', key: AUTH.key, person: AUTH.person || ls('hb_person') || '', sub: sub.toJSON() }) });
+}).then(function (r) { return r.json(); }).then(function (j) {
+if (!j || !j.ok) throw new Error((j && j.body) || '서버 오류');
+$('bell').hidden = true; ls('hb_push', '1'); drawPushBox(); if (!quiet) toast('이 폰 알림이 켜졌어요! 아래 “테스트 알림”으로 확인해 보세요.');
+}).catch(function (e) { drawPushBox(); if (!quiet) toast('알림을 켜지 못했어요: ' + errMsg(e), 'warn'); });
+}
+function pushEndpoint() {
+if (!canPush()) return Promise.resolve('');
+return navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (s) { return s ? s.endpoint : ''; }).catch(function () { return ''; });
+}
+function drawPushBox() {
+var box = $('pushBox'); if (!box) return;
+var ios = /iPhone|iPad|iPod/.test(navigator.userAgent), h;
+if (!standalone() && ios) h = '<b>📲 먼저 홈 화면에 추가해야 알림이 와요</b><ol><li>Safari로 이 주소를 열고</li><li>아래 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b></li><li>홈 화면에 생긴 <b>가계부 아이콘</b>으로 열어서 여기 다시 오기</li></ol><small>카카오톡·네이버 앱 안에서 연 화면이나 Safari 탭에서는 아이폰이 알림을 막아요.</small>';
+else if (!canPush()) h = '<b>이 브라우저는 알림을 지원하지 않아요</b><small>아이폰 iOS 16.4 이상, 홈 화면에 추가한 앱에서만 돼요.</small>';
+else if (Notification.permission === 'denied') h = '<b>🔕 알림이 꺼져 있어요</b><small>아이폰 <b>설정 › 알림 › 가계부</b>에서 “알림 허용”을 켜고 다시 와 주세요.</small>';
+else if (Notification.permission === 'granted') h = '<b>🔔 이 폰 알림 켜짐</b><small>안 오면 다시 연결해 주세요.</small><button class="btn small" id="pushOn" style="margin-top:8px">다시 연결</button>';
+else h = '<b>이 폰은 아직 알림이 꺼져 있어요</b><button class="btn small" id="pushOn" style="margin-top:8px">🔔 이 폰 알림 켜기</button>';
+box.innerHTML = h;
+var b = $('pushOn'); if (b) b.onclick = function () { Notification.requestPermission().then(function (p) { if (p === 'granted') pushSubscribe(false); else { drawPushBox(); toast('알림이 거부됐어요. 아이폰 설정 › 알림에서 켤 수 있어요.', 'warn'); } }); };
 }
 function hbAuth(a) {
 AUTH = a;
