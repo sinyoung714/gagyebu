@@ -1187,12 +1187,12 @@ function scanTick() {
   if (!sc.live) { sc.live = now; sc.hist = []; }
   sc.hist.push({ t: now, s: m.sharp, mv: m.move }); while (sc.hist.length && now - sc.hist[0].t > 1500) sc.hist.shift();
   var peak = Math.max.apply(null, sc.hist.map(function (x) { return x.s; })), prev = sc.hist.length > 1 ? sc.hist[sc.hist.length - 2].s : 0;
-  var warm = now - sc.live > 900;
-  var still = m.move < 6;
-  var focused = m.sharp > 45 && m.sharp >= peak * 0.85 && prev > 0 && Math.abs(m.sharp - prev) / prev < 0.15;
+  var warm = now - sc.live > 500, late = now - sc.live > 3500;
+  var still = m.move < (late ? 22 : 14);
+  var focused = m.sharp > 20 && m.sharp >= peak * (late ? 0.6 : 0.72);
   var good = warm && still && focused;
-  if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 2) sc.holdT = 0;
-  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 350) : 0;
+  if (good) { sc.bad = 0; if (!sc.holdT) sc.holdT = now; } else if (++sc.bad >= 3) sc.holdT = 0;
+  var prog = sc.holdT ? Math.min(1, (now - sc.holdT) / 250) : 0;
   var pg = $('scanProg'); if (pg) pg.style.width = Math.round(prog * 100) + '%';
   $('scanBox').classList.toggle('ok', good);
   var msg = $('scanMsg'); if (msg && !sc.shot) msg.textContent = !warm ? '카메라 맞추는 중…' : !still ? '가격표에 맞추고 멈춰 주세요' : !focused ? '초점 맞추는 중…' : '좋아요, 그대로…';
