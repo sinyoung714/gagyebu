@@ -143,6 +143,7 @@ body.sheet-open{position:fixed;left:0;right:0;overflow:hidden}
 .grp-h{display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:var(--sub);padding:12px 0 4px;border-bottom:1px solid var(--line)}
 .fx{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14.5px;cursor:pointer;border-bottom:1px solid var(--line)}
 .fx:last-child{border-bottom:0}.fx .d{width:30px;color:var(--sub);font-size:13px;flex:none}.fx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fx.off{opacity:.45}
+#x_rangewrap[hidden]{display:none}
 .loan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .loan-grid div{background:var(--soft);border-radius:12px;padding:10px 12px}
 .loan-grid .k{font-size:12px;color:var(--sub)} .loan-grid .v{font-weight:700;font-size:16px}
@@ -590,7 +591,7 @@ fixed.forEach(function (f) { var k = f['출금'] ? srcLabel(f['출금'], f['사�
 Object.keys(groups).sort(function (a, b) { return (gsum[b] || 0) - (gsum[a] || 0); }).forEach(function (k) {
 h += '<div class="grp-h"><span>' + esc(k) + '</span><span class="num">' + won(gsum[k] || 0) + '</span></div>';
 groups[k].sort(function (a, b) { return a['매달'] - b['매달']; }).forEach(function (f) {
-h += '<div class="fx' + (f['사용'] === 'N' ? ' off' : '') + '" data-fixed="' + esc(f.id) + '"><span class="d num">' + f['매달'] + '일</span><span class="t">' + esc(f['이름']) + (f['문자로기록됨'] === 'Y' ? ' <small style="color:var(--sub)">카드</small>' : '') + '</span><span class="num">' + fv[f.id].html + '</span></div>';
+h += '<div class="fx' + (f['사용'] === 'N' ? ' off' : '') + '" data-fixed="' + esc(f.id) + '"><span class="d num">' + f['매달'] + '일</span><span class="t">' + esc(f['이름']) + (f['문자로기록됨'] === 'Y' ? ' <small style="color:var(--sub)">카드' + (Number(f['결제건수']) > 1 ? ' · ' + Number(f['결제건수']) + '건' : '') + '</small>' : '') + '</span><span class="num">' + fv[f.id].html + '</span></div>';
 });
 });
 h += '</div>';
@@ -863,30 +864,56 @@ if (item) $('i_del').onclick = function () { if (confirm('삭제할까요?')) { 
 function openFixed(id, fromAdd) {
 var f = id ? S.d.fixed.find(function (x) { return x.id === id; }) : null; var g = f || {};
 var html = (fromAdd ? addSeg('fixed') + '<div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">매달 같은 날 나가는 돈(관리비·통신비·보험료 등)을 등록하면 그날 자동으로 기록돼요. 고정·대출 탭에서 등록하는 것과 같아요.</div>' : '') + '<div class="field"><label>이름</label><input id="x_name" value="' + esc(g['이름']) + '" placeholder="예: 아파트 관리비"></div>' +
-'<div class="two"><div class="field"><label>금액</label><input id="x_amt" inputmode="numeric" value="' + esc(g['금액'] || '') + '"></div>' +
+'<div class="two"><div class="field"><label id="x_amtlabel">금액</label><input id="x_amt" inputmode="numeric" value="' + esc(Number(g['결제건수']) > 1 ? (g['최대'] || g['금액'] || '') : (g['금액'] || '')) + '"></div>' +
 '<div class="field"><label>매달 며칠</label><input id="x_day" inputmode="numeric" value="' + esc(g['매달'] || '') + '" placeholder="25"></div></div>' +
 '<div class="two"><div class="field"><label>누구 지출</label><select id="x_who">' + opts(['공동'].concat(S.d.people), g['사람'] || '공동') + '</select></div>' +
 '<div class="field"><label>결제 방식</label><select id="x_how">' + opts([['N', '자동이체·계좌'], ['Y', '카드 결제']], g['문자로기록됨'] || 'N') + '</select></div></div>' +
 '<div class="field"><label>빠져나가는 곳 (은행 계좌·카드)</label><input id="x_src" list="srcList" value="' + esc(g['출금'] || '') + '" placeholder="예: 국민은행 생활비통장, 신한카드"><datalist id="srcList">' + srcOptions() + '</datalist></div>' +
 '<div id="x_cardwrap"' + (g['문자로기록됨'] === 'Y' ? '' : ' hidden') + '><div class="field"><label>카드 문자에 찍히는 이름</label><input id="x_kw" value="' + esc(g['문자이름'] || '') + '" placeholder="예: 주촌서희, ADYEN (여러 개는 쉼표로)"></div>' +
-'<div class="two"><div class="field"><label>매달 최소 (금액이 달라지면)</label><input id="x_lo" inputmode="numeric" value="' + esc(g['최소'] || '') + '" placeholder="150000"></div><div class="field"><label>매달 최대</label><input id="x_hi" inputmode="numeric" value="' + esc(g['최대'] || '') + '" placeholder="250000"></div></div>' +
+'<div class="field"><label>매달 결제 건수</label><input id="x_count" inputmode="numeric" value="' + esc(g['결제건수'] || 1) + '" placeholder="1"><div class="hint">같은 카드·같은 이름으로 따로 결제되는 요금은 건수를 입력해 한 묶음으로 관리해요.</div></div>' +
+'<div class="two" id="x_rangewrap"><div class="field" id="x_lowrap"><label>매달 최소 (금액이 달라지면)</label><input id="x_lo" inputmode="numeric" value="' + esc(g['최소'] || '') + '" placeholder="150000"></div><div class="field"><label id="x_hilabel">매달 최대</label><input id="x_hi" inputmode="numeric" value="' + esc(g['최대'] || '') + '" placeholder="250000"></div></div>' +
 '<div class="hint" id="x_esthint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px"></div></div>' +
-'<div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">자동이체는 그날 앱이 알아서 기록해요. 카드 결제는 문자가 오면 이름을 보고 고정지출로 알아봐서 생활비에서 빼고, 그달 금액을 실제 결제 금액으로 바꿔요.</div>';
+'<div class="hint" style="font-size:12.5px;color:var(--sub);margin:-6px 0 14px">자동이체는 그날 앱이 알아서 기록해요. 카드 결제는 기존 결제 내역을 연결해 실제 금액으로 바꿔요. 카드값에 포함된 금액을 새 지출로 추가하지 않아요.</div>' + fixedGroupInfo(f);
 itemSheet(f ? '고정지출 수정' : '고정지출 추가', '고정지출', f, html, function () {
 var o = { '이름': v('x_name').trim(), '금액': v('x_amt'), '매달': v('x_day'), '사람': v('x_who'), '문자로기록됨': v('x_how'), '분류': '고정지출', '출금': v('x_src').trim() };
-if (o['문자로기록됨'] === 'Y') { var lo = numv('x_lo'), hi = numv('x_hi'); if (hi && lo > hi) { var tmp = lo; lo = hi; hi = tmp; } o['최소'] = lo || ''; o['최대'] = hi || ''; o['문자이름'] = v('x_kw').trim(); if (hi && !numv('x_amt')) o['금액'] = estOf(lo, hi); } else { o['최소'] = ''; o['최대'] = ''; }
+if (o['문자로기록됨'] === 'Y') {
+var count = Number(v('x_count')), lo = numv('x_lo'), hi = numv('x_hi');
+if (!Number.isInteger(count) || count < 1 || count > 31) { toast('결제 건수는 1~31건으로 입력해 주세요', 'warn'); return null; }
+o['결제건수'] = count; o['문자이름'] = v('x_kw').trim();
+if (count > 1) {
+if (!S.d.cards.some(function (c) { return c['사용'] !== 'N' && c['이름'] === o['출금']; })) { toast('빠져나가는 곳에 등록된 카드 이름을 선택해 주세요', 'warn'); return null; }
+if (!o['문자이름']) { toast('묶을 결제의 문자 이름을 입력해 주세요', 'warn'); return null; }
+o['금액'] = numv('x_amt'); o['최대'] = o['금액']; o['최소'] = '';
+} else { if (hi && lo > hi) { var tmp = lo; lo = hi; hi = tmp; } o['최소'] = lo || ''; o['최대'] = hi || ''; if (hi && !numv('x_amt')) o['금액'] = estOf(lo, hi); }
+} else { o['최소'] = ''; o['최대'] = ''; o['결제건수'] = 1; }
 if (!o['이름'] || !Number(String(o['금액']).replace(/[^\d]/g, ''))) { toast('이름과 금액(또는 최소·최대)을 입력해 주세요', 'warn'); return null; }
 var day = Number(o['매달']); if (!(day >= 1 && day <= 31)) { toast('날짜는 1~31 사이로 입력해 주세요', 'warn'); return null; }
 return o;
 });
 if (fromAdd) bindAddSeg();
-var upd = function () { $('x_cardwrap').hidden = v('x_how') !== 'Y'; var lo = numv('x_lo'), hi = numv('x_hi'); $('x_esthint').textContent = hi ? '결제 전에는 약 ' + won(estOf(Math.min(lo, hi), Math.max(lo, hi))) + '으로 넉넉하게 잡아 두고, 문자가 오면 실제 금액으로 바뀌어요.' : '금액이 매달 같으면 최소·최대는 비워 두세요.'; };
-$('x_how').onchange = upd; $('x_lo').oninput = upd; $('x_hi').oninput = upd; upd();
+var upd = function () {
+var group = v('x_how') === 'Y' && numv('x_count') > 1, lo = numv('x_lo'), hi = numv('x_hi');
+$('x_cardwrap').hidden = v('x_how') !== 'Y'; $('x_rangewrap').hidden = group;
+$('x_amtlabel').textContent = group ? '매달 확보할 최대 합계' : '금액';
+$('x_hilabel').textContent = group ? '묶음 최대 합계' : '매달 최대';
+$('x_esthint').textContent = group ? '매달 ' + won(numv('x_amt')) + '을 먼저 확보해요. ' + numv('x_count') + '건이 모두 오면 실제 합계로 바뀌고, 그전에는 예상액을 유지해요. 실제 결제가 더 크면 초과액도 반영해요.' : hi ? '결제 전에는 약 ' + won(estOf(Math.min(lo, hi), Math.max(lo, hi))) + '으로 넉넉하게 잡아 두고, 문자가 오면 실제 금액으로 바뀌어요.' : '금액이 매달 같으면 최소·최대는 비워 두세요.';
+};
+$('x_how').onchange = upd; $('x_lo').oninput = upd; $('x_hi').oninput = upd; $('x_count').oninput = upd; $('x_amt').oninput = upd; upd();
+}
+function fixedGroupInfo(f) {
+if (!f || !(Number(f['결제건수']) > 1)) return '';
+var st = (S.d.summary.fixedStatus || {})[f.id]; if (!st || st.later) return '';
+var txs = S.d.txs.filter(function (t) { return (st.txIds || []).indexOf(t.id) >= 0; });
+return '<div class="card" style="background:var(--soft);padding:12px;margin:12px 0"><b>' + esc(S.d.ym) + ' · 결제 확인 ' + (st.n || 0) + '/' + Number(f['결제건수']) + '건</b>' + txs.map(function (t) { return '<div class="row"><span class="k">' + esc(String(t['날짜']).slice(5, 16)) + '</span><span class="num">' + won(t['금액']) + '</span></div>'; }).join('') + '<div class="row"><span>실제 결제 합계</span><b class="num">' + won(st.paid || 0) + '</b></div><div class="hint">' + (st.actual ? '카드 이용액에 이미 포함된 결제예요.' : '결제 확인이 끝날 때까지 남은 예상액을 확보해 둬요.') + (st.over > 0 ? ' 예상보다 ' + won(st.over) + ' 더 결제됐어요.' : '') + '</div></div>';
 }
 function numv(i) { return Number(String(v(i) || '').replace(/[^\d]/g, '')) || 0; }
 function estOf(lo, hi) { return Math.ceil((lo + (hi - lo) * 0.7) / 1000) * 1000; }
 function fxView(f) {
 var st = (S.d.summary && S.d.summary.fixedStatus || {})[f.id];
+if (st && f['문자로기록됨'] === 'Y' && Number(f['결제건수']) > 1 && !st.later) {
+var note = (st.n || 0) + '/' + Number(f['결제건수']) + '건 ' + (st.actual ? '결제됨' : '확인 · 예상액 확보');
+return { amt: st.amount, html: won(st.amount) + '<small style="display:block;text-align:right;color:var(' + (st.actual ? '--good' : '--sub') + ');font-size:11.5px">' + note + '</small>' + (st.over > 0 ? '<small style="display:block;text-align:right;color:var(--bad);font-size:11.5px">예상보다 ' + won(st.over) + ' 초과</small>' : '') };
+}
 if (!st || f['문자로기록됨'] !== 'Y' || !(Number(f['최대']) > 0 || st.actual || st.later)) return { amt: st ? st.amount : Number(f['금액']), html: won(st ? st.amount : f['금액']) };
 if (st.later) return { amt: 0, html: '<span style="color:var(--sub)">' + won(st.est) + '</span><small style="display:block;text-align:right;color:var(--sub);font-size:11.5px">' + (+st.later.slice(5, 7)) + '월부터</small>' };
 if (st.actual) return { amt: st.amount, html: won(st.amount) + '<small style="display:block;text-align:right;color:var(--good);font-size:11.5px">결제됨</small>' };

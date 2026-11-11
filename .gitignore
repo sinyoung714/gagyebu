@@ -1,0 +1,2 @@
+# The live legacy function contains deployment credentials. Keep exports local.
+supabase/functions/api/index.ts
