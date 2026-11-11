@@ -1,0 +1,114 @@
+--- a/supabase/functions/api/index.ts
++++ b/supabase/functions/api/index.ts
+@@ -86,7 +86,7 @@
+ const HEADERS = {
+ '거래': ['id', '날짜', '사람', '카드', '가맹점', '금액', '분류', '출처', '상태', '메모', '등록시각', '원문', '할부', '수수료율'],
+ '카드': ['id', '이름', '주인', '인식단어', '결제일', '이용시작일', '사용'],
+-'고정지출': ['id', '이름', '금액', '매달', '분류', '사람', '문자로기록됨', '사용', '출금', '최소', '최대', '문자이름', '시작월'],
++'고정지출': ['id', '이름', '금액', '매달', '분류', '사람', '문자로기록됨', '사용', '출금', '최소', '최대', '문자이름', '시작월', '결제건수'],
+ '대출': ['id', '이름', '남은원금', '연이율', '남은개월', '상환방식', '납부일', '자동시작월', '사용', '증가율', '기준상환액', '거치끝'],
+ '분류규칙': ['단어', '분류', '표시이름'],
+ '장바구니': ['id', '시작', '사람', '품목', '합계', '상태', '거래id', '수정'],
+@@ -98,7 +98,7 @@
+ const NUMERIC = {
+ '거래': ['금액'],
+ '카드': ['결제일', '이용시작일'],
+-'고정지출': ['금액', '매달', '최소', '최대'],
++'고정지출': ['금액', '매달', '최소', '최대', '결제건수'],
+ '대출': ['남은원금', '연이율', '남은개월', '납부일', '증가율', '기준상환액']
+ };
+ const EDITABLE_TABLES = ['카드', '고정지출', '대출'];
+@@ -230,7 +230,7 @@
+ }
+ function ensureHeaders_() {
+ const hc = CacheService.getScriptCache();
+-if (hc.get('hdr_v10')) return;
++if (hc.get('hdr_v11')) return;
+ if (!ss_().getSheetByName('장바구니')) { const bs = ss_().insertSheet('장바구니'); bs.appendRow(HEADERS['장바구니']); }
+ ['고정지출', '대출', '기기', '거래', '분류규칙'].forEach(function (name) {
+ const sh = name === '기기' ? devSheet_() : ss_().getSheetByName(name);
+@@ -241,7 +241,7 @@
+ delete _cache[name];
+ }
+ });
+-hc.put('hdr_v10', '1', 21600);
++hc.put('hdr_v11', '1', 21600);
+ }
+ function devSheet_() {
+ let sh = ss_().getSheetByName('기기');
+@@ -390,7 +390,7 @@
+ const rh_ = ruleHit_(p.merchant, readTable_('분류규칙'));
+ if (rh_ && String(rh_['표시이름'] || '').trim()) p.merchant = String(rh_['표시이름']).trim();
+ let cat = rh_ ? rh_['분류'] : '기타';
+-const fixedHit = !p.cancel && cardFixList_().some(function (f) { return fxMatch_(f, { '가맹점': p.merchant, '카드': p.card['이름'], '금액': p.amount }); });
++const fixedHit = !!cardFixOf_({ '가맹점': p.merchant, '카드': p.card['이름'], '금액': p.amount, '날짜': p.date });
+ if (fixedHit) cat = '고정지출';
+ const tx = {
+ id: uid_(), '날짜': p.date, '사람': p.card['주인'] || '', '카드': p.card['이름'], '가맹점': p.merchant,
+@@ -540,15 +540,43 @@
+ }
+ function nsp_(x) { return String(x || '').toUpperCase().replace(/\s+/g, ''); }
+ function fxKeys_(f) { const ks = String(f['문자이름'] || '').split(/[,，\/]/).map(nsp_).filter(function (x) { return x.length >= 2; }); const n = nsp_(f['이름']); if (n.length >= 2) ks.push(n); return ks; }
+-function fxMatch_(f, t) { if (t['출처'] === '고정' || t['출처'] === '대출' || t['분류'] === '수입') return false; const fc = String(f['출금'] || '').trim(); if (fc && t['카드'] && readTable_('카드').some(function (c) { return c['이름'] === fc; }) && t['카드'] !== fc) return false; const amt = Number(t['금액']); if (t['금액'] !== undefined && !(amt > 0)) return false; if (amt > 0) { const lo = Number(f['최소']) || 0, hi = Number(f['최대']) || 0, base = Number(f['금액']) || 0; if (hi > 0 ? (amt < lo * 0.5 || amt > hi * 1.5) : (base > 0 && (amt < base * 0.5 || amt > base * 1.5))) return false; } const m = nsp_(t['가맹점']); if (m.length < 2) return false; return fxKeys_(f).some(function (k) { return m.indexOf(k) >= 0; }); }
++function fxCount_(f) { return Math.max(1, Math.min(31, Math.floor(Number(f['결제건수']) || 1))); }
++function fxMatch_(f, t) {
++if (t['출처'] === '고정' || t['출처'] === '대출' || t['분류'] === '수입' || t['상태'] === '예정') return false;
++const group = fxCount_(f) > 1, fc = String(f['출금'] || '').trim();
++if (group ? (!fc || t['카드'] !== fc) : (fc && t['카드'] && readTable_('카드').some(function (c) { return c['이름'] === fc; }) && t['카드'] !== fc)) return false;
++const amt = Number(t['금액']);
++if (t['금액'] !== undefined && (group ? !amt : !(amt > 0))) return false;
++// A group reserves a total, so an individual charge must not be compared with that total.
++if (!group && amt > 0) {
++const lo = Number(f['최소']) || 0, hi = Number(f['최대']) || 0, base = Number(f['금액']) || 0;
++if (hi > 0 ? (amt < lo * 0.5 || amt > hi * 1.5) : (base > 0 && (amt < base * 0.5 || amt > base * 1.5))) return false;
++}
++const m = nsp_(t['가맹점']); if (m.length < 2) return false;
++return fxKeys_(f).some(function (k) { return group ? m === k : m.indexOf(k) >= 0; });
++}
+ function cardFixList_() { return readTable_('고정지출').filter(function (f) { return f['사용'] !== 'N' && f['문자로기록됨'] === 'Y'; }); }
+-function cardFixOf_(t) { return cardFixList_().find(function (f) { return fxMatch_(f, t); }) || null; }
+-function fxEst_(f) { const lo = Number(f['최소']) || 0, hi = Number(f['최대']) || 0; if (hi > 0 && hi >= lo) return Math.ceil((lo + (hi - lo) * 0.7) / 1000) * 1000; return Number(f['금액']) || 0; }
++function cardFixOf_(t) {
++const hits = cardFixList_().filter(function (f) {
++if (f['시작월'] && t['날짜'] && String(f['시작월']) > txCy_(t)) return false;
++return fxMatch_(f, t);
++});
++// Each transaction has a single owner, even when another fixed item's keyword overlaps.
++return hits.find(function (f) { return fxCount_(f) > 1; }) || hits[0] || null;
++}
++function fxEst_(f) { const lo = Number(f['최소']) || 0, hi = Number(f['최대']) || 0; if (fxCount_(f) > 1) return hi > 0 ? hi : Number(f['금액']) || 0; if (hi > 0 && hi >= lo) return Math.ceil((lo + (hi - lo) * 0.7) / 1000) * 1000; return Number(f['금액']) || 0; }
+ function fxAmt_(f, cy, all) {
+ const est = fxEst_(f);
+ if (/^\d{4}-\d{2}$/.test(String(f['시작월'] || '')) && String(f['시작월']) > cy) return { amount: 0, est: est, actual: false, n: 0, later: String(f['시작월']) };
+ if (f['문자로기록됨'] !== 'Y') return { amount: Number(f['금액']) || 0, est: est, actual: false, n: 0 };
+-const hits = all.filter(function (t) { return txCy_(t) === cy && fxMatch_(f, t); });
++const hits = all.filter(function (t) { if (txCy_(t) !== cy) return false; const owner = cardFixOf_(t); return owner && owner.id === f.id; });
++const expected = fxCount_(f);
++if (expected > 1) {
++const paid = hits.reduce(function (a, t) { return a + (Number(t['금액']) || 0); }, 0);
++const n = hits.filter(function (t) { return Number(t['금액']) > 0; }).length;
++const actual = n >= expected;
++return { amount: actual ? paid : Math.max(est, paid), est: est, actual: actual, n: n, expected: expected, paid: paid, reserve: actual ? 0 : Math.max(0, est - paid), over: Math.max(0, paid - est), range: true, txIds: hits.map(function (t) { return t.id; }), date: hits.length ? String(hits[0]['날짜']).slice(0, 10) : '' };
++}
+ if (!hits.length) return { amount: est, est: est, actual: false, n: 0, range: (Number(f['최대']) || 0) > 0 };
+ const act = hits.reduce(function (a, t) { return a + (Number(t['금액']) || 0); }, 0);
+ return { amount: act, est: est, actual: true, n: hits.length, date: String(hits[0]['날짜']).slice(0, 10) };
+@@ -1052,6 +1080,18 @@
+ const clean = {};
+ HEADERS[table].forEach(function (h) { if (h !== 'id' && h in item) clean[h] = item[h]; });
+ (NUMERIC[table] || []).forEach(function (h) { if (h in clean) clean[h] = Number(String(clean[h]).replace(/[^\d.]/g, '')) || 0; });
++if (table === '고정지출') {
++const old = item.id ? readTable_(table).find(function (f) { return f.id === item.id; }) : null;
++const merged = Object.assign({}, old || {}, clean);
++if ('결제건수' in clean && (!Number.isInteger(clean['결제건수']) || clean['결제건수'] < 1 || clean['결제건수'] > 31)) throw new Error('결제 건수는 1~31건으로 입력해 주세요');
++if (fxCount_(merged) > 1) {
++if (merged['문자로기록됨'] !== 'Y') throw new Error('여러 건 묶음은 카드 결제로 등록해 주세요');
++if (!readTable_('카드').some(function (c) { return c['사용'] !== 'N' && c['이름'] === merged['출금']; })) throw new Error('등록된 결제 카드를 선택해 주세요');
++if (!String(merged['문자이름'] || '').trim()) throw new Error('묶을 결제의 문자 이름을 입력해 주세요');
++if (!(fxEst_(merged) > 0)) throw new Error('매달 확보할 최대 합계를 입력해 주세요');
++if (!old && !clean['시작월']) clean['시작월'] = cycleOf_(nowParts_().str);
++}
++}
+ if (item.id && findRow_(table, item.id)) {
+ updateById_(table, item.id, clean);
+ return { id: item.id };
